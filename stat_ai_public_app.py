@@ -31,19 +31,23 @@ st.set_page_config(
 
 st.markdown("""
 <style>
-.main-title {font-size: 2.2rem; font-weight: 700; margin-bottom: 0.2rem;}
-.subtitle {font-size: 1.05rem; color: #666; margin-bottom: 1rem;}
-.step-card {padding: 1rem; border: 1px solid #ddd; border-radius: 12px; margin-bottom: .75rem;}
-.small-note {font-size: .9rem; color: #666;}
+:root { --stat-accent: #176b87; --stat-accent-dark: #0d4f66; }
+.block-container { padding-top: 2rem; padding-bottom: 3rem; max-width: 1450px; }
+.main-title { font-size: clamp(1.8rem, 4vw, 3rem); font-weight: 800; letter-spacing: -0.04em; line-height: 1.1; margin-bottom: .35rem; color: #123746; }
+.subtitle { font-size: 1.08rem; color: #52636b; margin-bottom: 1.25rem; max-width: 900px; }
+.hero { padding: 1.35rem 1.5rem; border-radius: 18px; background: linear-gradient(135deg, #e9f5f8 0%, #f8fbfc 100%); border: 1px solid #c9e3ea; margin-bottom: 1.25rem; }
+.hero-kicker { text-transform: uppercase; letter-spacing: .12em; font-size: .75rem; font-weight: 800; color: #176b87; margin-bottom: .45rem; }
+.section-label { font-size: .78rem; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; color: #176b87; margin-top: .8rem; }
+.step-card { padding: 1rem 1.15rem; border: 1px solid #dce7eb; border-radius: 14px; margin-bottom: .75rem; background: #ffffff; }
+.small-note { font-size: .9rem; color: #66777e; }
+div[data-testid="stMetric"] { background: #f6fafb; border: 1px solid #dcecef; padding: .8rem 1rem; border-radius: 13px; }
+div[data-testid="stMetricValue"] { color: #123746; }
+.stButton > button { border-radius: 10px; font-weight: 700; }
+[data-testid="stSidebar"] { background: #f4f8fa; }
 </style>
 """, unsafe_allow_html=True)
 
-st.markdown('<div class="main-title">📊 StatAI — Statistical & AI Regression Analyzer</div>', unsafe_allow_html=True)
-st.markdown(
-    '<div class="subtitle">Upload your dataset, select an outcome and predictors, '
-    'then compare statistical, AI and hybrid regression models.</div>',
-    unsafe_allow_html=True
-)
+st.markdown("""<div class="hero"><div class="hero-kicker">Research & predictive analytics</div><div class="main-title">📊 Statistical–AI Hybrid Modelling Platform</div><div class="subtitle">A practical environment for prediction, statistical inference, diagnostics, and comparison of statistical, artificial-intelligence, and hybrid regression models.</div></div>""", unsafe_allow_html=True)
 
 def read_uploaded_file(uploaded):
     name = uploaded.name.lower()
@@ -172,13 +176,29 @@ def safe_numeric_series(s):
     )
 
 with st.sidebar:
-    st.header("⚙️ Analysis settings")
+    st.header("⚙️ Analysis controls")
+    st.markdown("**Validation**")
     test_size = st.slider("Test-set proportion", 0.15, 0.40, 0.25, 0.05)
     random_state = st.number_input("Random seed", 1, 9999, 42, 1)
-    n_splits = st.slider("Hybrid cross-validation folds", 3, 10, 5, 1)
+    n_splits = st.slider("Cross-validation folds", 3, 10, 5, 1)
+
+    st.markdown("**Model settings**")
     rf_trees = st.slider("Random Forest trees", 100, 800, 300, 50)
     gb_trees = st.slider("Gradient Boosting trees", 50, 500, 200, 25)
     poly_degree = st.selectbox("Polynomial degree", [2, 3], index=0)
+
+    st.markdown("**Model selection**")
+    selection_criterion = st.selectbox(
+        "Choose model by",
+        ["Cross-validation RMSE", "Cross-validation MAE", "Cross-validation R²", "Test RMSE", "Test MAE", "Test R²"],
+        index=0,
+        help="For rigorous research, use cross-validation for model selection and reserve the final test set for confirmation."
+    )
+    model_choice = st.radio(
+        "Final model display",
+        ["Automatically select", "Choose manually"],
+        index=0
+    )
 
     st.divider()
     st.markdown("**Privacy note**")
@@ -188,7 +208,8 @@ with st.sidebar:
         "comfortable with the hosting environment."
     )
 
-st.subheader("1️⃣ Upload your data")
+st.markdown('<div class="section-label">Step 1 · Data input</div>', unsafe_allow_html=True)
+st.subheader("Upload your dataset")
 uploaded_file = st.file_uploader(
     "Upload CSV or Excel",
     type=["csv", "xlsx", "xls"],
@@ -223,9 +244,9 @@ if df_raw.empty:
 df = coerce_numeric_like(df_raw)
 df = df.replace([np.inf, -np.inf], np.nan)
 
-st.success(f"Loaded **{len(df):,} rows × {len(df.columns):,} columns**")
+st.success(f"Dataset loaded successfully: **{len(df):,} rows × {len(df.columns):,} columns**")
 
-tab1, tab2, tab3 = st.tabs(["📋 Data preview", "🔎 Data quality", "📚 Guide"])
+tab1, tab2, tab3 = st.tabs(["📋 Data preview", "🔎 Data quality", "📚 Method guide"])
 
 with tab1:
     st.dataframe(df.head(15), use_container_width=True)
@@ -309,14 +330,39 @@ st.info(
     f"**Usable observations:** {len(y):,}"
 )
 
-with st.expander("Model choices included"):
-    st.write(
-        "Linear Regression, Polynomial Regression, Ridge, Lasso, Elastic Net, "
-        "Random Forest, Gradient Boosting, and Linear + AI Residual Hybrid."
-    )
+model_options = [
+    "Linear Regression", "Polynomial Regression", "Ridge Regression",
+    "Lasso Regression", "Elastic Net", "Random Forest",
+    "Gradient Boosting", "Linear + AI Residual Hybrid"
+]
+selected_models = st.multiselect(
+    "Models to run",
+    model_options,
+    default=model_options,
+    help="Choose which statistical, AI and hybrid models to include in the analysis."
+)
+
+if model_choice == "Choose manually":
+    manual_model = st.selectbox("Model to report as final selected model", selected_models or model_options)
+else:
+    manual_model = None
+
+with st.expander("What the models mean"):
+    st.markdown("""
+- **Linear Regression:** interpretable parametric baseline.
+- **Polynomial Regression:** adds nonlinear polynomial terms.
+- **Ridge / Lasso / Elastic Net:** regularized linear models that can reduce overfitting and handle correlated predictors.
+- **Random Forest:** tree ensemble that can capture nonlinearities and interactions.
+- **Gradient Boosting:** sequential tree ensemble that learns residual structure.
+- **Linear + AI Residual Hybrid:** linear statistical structure plus an AI learner trained on out-of-fold residuals.
+""")
+
+if not selected_models:
+    st.warning("Select at least one model.")
+    st.stop()
 
 run_models = st.button(
-    "🚀 Run Analysis & Compare Models",
+    "🚀 Run Analysis & Generate Statistical Report",
     type="primary",
     use_container_width=True
 )
@@ -363,91 +409,200 @@ models = {
 }
 
 predictions = {}
+train_predictions = {}
 rows = []
+cv_rows = []
 
 progress = st.progress(0, text="Running models...")
-total = len(models) + 1
+selected_standard = [m for m in selected_models if m != "Linear + AI Residual Hybrid"]
+total_steps = max(1, len(selected_standard) * 2 + (2 if "Linear + AI Residual Hybrid" in selected_models else 0))
+step = 0
 
-for i, (name, estimator) in enumerate(models.items(), start=1):
+for name in selected_standard:
+    estimator = models[name]
     fitted = clone(estimator)
     fitted.fit(X_train, y_train)
-    pred = fitted.predict(X_test)
-    predictions[name] = pred
-    m = metric_values(y_test, pred)
+    pred_test = fitted.predict(X_test)
+    pred_train = fitted.predict(X_train)
+    predictions[name] = pred_test
+    train_predictions[name] = pred_train
+    m_test = metric_values(y_test, pred_test)
+    m_train = metric_values(y_train, pred_train)
     rows.append({
         "Model": name,
         "Type": "AI" if name in ["Random Forest", "Gradient Boosting"] else "Statistical",
-        **m
+        "Train RMSE": m_train["RMSE"], "Train MAE": m_train["MAE"], "Train R²": m_train["R²"],
+        "RMSE": m_test["RMSE"], "MAE": m_test["MAE"], "R²": m_test["R²"]
     })
-    progress.progress(i / total, text=f"Completed {name}")
+    step += 1
+    progress.progress(step / total_steps, text=f"Testing {name}")
 
-hybrid_base = make_pipeline_model(LinearRegression(), X)
-hybrid_residual = make_pipeline_model(
-    GradientBoostingRegressor(
-        n_estimators=int(gb_trees),
-        learning_rate=0.05,
-        max_depth=3,
-        random_state=int(random_state)
-    ), X
-)
+    # Cross-validation on the training portion; final test set remains untouched.
+    cv_rmse, cv_mae, cv_r2 = [], [], []
+    kf = KFold(n_splits=int(n_splits), shuffle=True, random_state=int(random_state))
+    for tr_idx, va_idx in kf.split(X_train):
+        fold_model = clone(estimator)
+        fold_model.fit(X_train.iloc[tr_idx], y_train.iloc[tr_idx])
+        fold_pred = fold_model.predict(X_train.iloc[va_idx])
+        fold_metrics = metric_values(y_train.iloc[va_idx], fold_pred)
+        cv_rmse.append(fold_metrics["RMSE"])
+        cv_mae.append(fold_metrics["MAE"])
+        cv_r2.append(fold_metrics["R²"])
+    cv_rows.append({
+        "Model": name,
+        "CV RMSE": float(np.mean(cv_rmse)),
+        "CV RMSE SD": float(np.std(cv_rmse, ddof=1)) if len(cv_rmse) > 1 else 0.0,
+        "CV MAE": float(np.mean(cv_mae)),
+        "CV MAE SD": float(np.std(cv_mae, ddof=1)) if len(cv_mae) > 1 else 0.0,
+        "CV R²": float(np.mean(cv_r2)),
+        "CV R² SD": float(np.std(cv_r2, ddof=1)) if len(cv_r2) > 1 else 0.0,
+    })
+    step += 1
+    progress.progress(step / total_steps, text=f"Cross-validating {name}")
 
-_, _, hybrid_pred, residual_test_pred, oof_residuals = fit_hybrid_oof(
-    hybrid_base, hybrid_residual, X_train, y_train, X_test,
-    n_splits=int(n_splits), random_state=int(random_state)
-)
-
-predictions["Linear + AI Residual Hybrid"] = hybrid_pred
-m = metric_values(y_test, hybrid_pred)
-rows.append({
-    "Model": "Linear + AI Residual Hybrid",
-    "Type": "Hybrid",
-    **m
-})
+if "Linear + AI Residual Hybrid" in selected_models:
+    hybrid_base = make_pipeline_model(LinearRegression(), X)
+    hybrid_residual = make_pipeline_model(
+        GradientBoostingRegressor(
+            n_estimators=int(gb_trees), learning_rate=0.05, max_depth=3,
+            random_state=int(random_state)
+        ), X
+    )
+    hybrid_base_final, hybrid_residual_final, hybrid_pred, residual_test_pred, oof_residuals = fit_hybrid_oof(
+        hybrid_base, hybrid_residual, X_train, y_train, X_test,
+        n_splits=int(n_splits), random_state=int(random_state)
+    )
+    # In-sample training prediction from the fitted final components.
+    base_train_pred = hybrid_base_final.predict(X_train)
+    residual_train_pred = hybrid_residual_final.predict(X_train)
+    hybrid_train_pred = base_train_pred + residual_train_pred
+    predictions["Linear + AI Residual Hybrid"] = hybrid_pred
+    train_predictions["Linear + AI Residual Hybrid"] = hybrid_train_pred
+    m_test = metric_values(y_test, hybrid_pred)
+    m_train = metric_values(y_train, hybrid_train_pred)
+    rows.append({
+        "Model": "Linear + AI Residual Hybrid", "Type": "Hybrid",
+        "Train RMSE": m_train["RMSE"], "Train MAE": m_train["MAE"], "Train R²": m_train["R²"],
+        "RMSE": m_test["RMSE"], "MAE": m_test["MAE"], "R²": m_test["R²"]
+    })
+    # The hybrid is evaluated through repeated OOF base residual construction on the training data.
+    # This is reported separately and is not used as a substitute for the untouched final test set.
+    cv_rows.append({
+        "Model": "Linear + AI Residual Hybrid",
+        "CV RMSE": float(np.sqrt(np.mean(oof_residuals ** 2))),
+        "CV RMSE SD": np.nan,
+        "CV MAE": float(np.mean(np.abs(oof_residuals))),
+        "CV MAE SD": np.nan,
+        "CV R²": float(1 - np.sum(oof_residuals ** 2) / np.sum((y_train.to_numpy() - y_train.mean()) ** 2)),
+        "CV R² SD": np.nan,
+    })
+    step += 2
+    progress.progress(min(1.0, step / total_steps), text="Completed hybrid residual analysis")
+else:
+    residual_test_pred = np.zeros(len(X_test))
 
 progress.progress(1.0, text="Analysis complete")
 progress.empty()
 
 comparison = pd.DataFrame(rows)
-comparison["RMSE Rank"] = comparison["RMSE"].rank(method="min", ascending=True).astype(int)
-comparison["MAE Rank"] = comparison["MAE"].rank(method="min", ascending=True).astype(int)
-comparison["R² Rank"] = comparison["R²"].rank(method="min", ascending=False).astype(int)
-comparison["Average Rank"] = comparison[["RMSE Rank", "MAE Rank", "R² Rank"]].mean(axis=1)
+cv_comparison = pd.DataFrame(cv_rows)
+comparison = comparison.merge(cv_comparison, on="Model", how="left")
+comparison["Test RMSE Rank"] = comparison["RMSE"].rank(method="min", ascending=True).astype(int)
+comparison["Test MAE Rank"] = comparison["MAE"].rank(method="min", ascending=True).astype(int)
+comparison["Test R² Rank"] = comparison["R²"].rank(method="min", ascending=False).astype(int)
+comparison["CV RMSE Rank"] = comparison["CV RMSE"].rank(method="min", ascending=True).astype(int)
+comparison["CV MAE Rank"] = comparison["CV MAE"].rank(method="min", ascending=True).astype(int)
+comparison["CV R² Rank"] = comparison["CV R²"].rank(method="min", ascending=False).astype(int)
+comparison["Average Test Rank"] = comparison[["Test RMSE Rank", "Test MAE Rank", "Test R² Rank"]].mean(axis=1)
+comparison["Generalization Gap R²"] = comparison["Train R²"] - comparison["R²"]
 comparison = comparison.sort_values("RMSE").reset_index(drop=True)
 
-st.subheader("3️⃣ Model comparison — unseen test data")
+# Determine the selected model using the user's criterion.
+if model_choice == "Choose manually":
+    selected_final_model = manual_model
+else:
+    if selection_criterion == "Cross-validation RMSE":
+        selected_final_model = comparison.loc[comparison["CV RMSE"].idxmin(), "Model"]
+    elif selection_criterion == "Cross-validation MAE":
+        selected_final_model = comparison.loc[comparison["CV MAE"].idxmin(), "Model"]
+    elif selection_criterion == "Cross-validation R²":
+        selected_final_model = comparison.loc[comparison["CV R²"].idxmax(), "Model"]
+    elif selection_criterion == "Test RMSE":
+        selected_final_model = comparison.loc[comparison["RMSE"].idxmin(), "Model"]
+    elif selection_criterion == "Test MAE":
+        selected_final_model = comparison.loc[comparison["MAE"].idxmin(), "Model"]
+    else:
+        selected_final_model = comparison.loc[comparison["R²"].idxmax(), "Model"]
+
+selected_row = comparison.loc[comparison["Model"] == selected_final_model].iloc[0]
+
+st.subheader("3️⃣ Model selection and complete performance report")
+sel_col1, sel_col2, sel_col3 = st.columns(3)
+sel_col1.metric("Selected model", selected_final_model)
+sel_col2.metric("Selection criterion", selection_criterion)
+sel_col3.metric("Test R²", f"{selected_row['R²']:.4f}")
+
+st.info(
+    "**How to use this selection:** for a research analysis, the preferred default is a cross-validation criterion. "
+    "The final hold-out test set should then be used as an independent confirmation of performance. "
+    "If you choose a test-set criterion, interpret it as a descriptive selection on this particular split, not as an unbiased future-performance estimate."
+)
+
+report_cols = [
+    "Model", "Type", "Train RMSE", "Train MAE", "Train R²",
+    "CV RMSE", "CV RMSE SD", "CV MAE", "CV MAE SD", "CV R²", "CV R² SD",
+    "RMSE", "MAE", "R²", "Generalization Gap R²",
+    "Test RMSE Rank", "Test MAE Rank", "Test R² Rank", "Average Test Rank"
+]
 st.dataframe(
-    comparison.style.format({
-        "RMSE": "{:.6f}", "MAE": "{:.6f}", "R²": "{:.6f}",
-        "Average Rank": "{:.2f}"
+    comparison[report_cols].style.format({
+        c: "{:.6f}" for c in report_cols if c not in ["Model", "Type"] and "Rank" not in c
+    }).format({
+        c: "{:.2f}" for c in report_cols if "Rank" in c
     }),
-    use_container_width=True,
-    hide_index=True
+    use_container_width=True, hide_index=True
 )
 st.caption(
-    "The table is ordered by test RMSE for readability. "
-    "The displayed order is not a universal ranking of models."
+    "Train metrics describe fit to the training data. CV metrics summarize training-set cross-validation. "
+    "Test metrics come from the untouched hold-out test set. Lower RMSE/MAE is better; higher R² is better. "
+    "The report is descriptive and should be interpreted with the validation design and model assumptions."
 )
+
+with st.expander("📘 Statistical interpretation of the performance report", expanded=True):
+    st.markdown(f"""
+**Selected model:** `{selected_final_model}` using **{selection_criterion}**.
+
+- **RMSE:** measures the typical prediction error on the outcome scale, with larger errors receiving greater weight.
+- **MAE:** measures the average absolute prediction error and is less sensitive to very large errors than RMSE.
+- **R²:** measures the proportion of outcome variation accounted for relative to the test-set mean baseline; it can be negative for a poor model.
+- **Cross-validation:** estimates expected performance across multiple validation folds within the training data.
+- **Generalization gap:** `Train R² − Test R²`; a large positive value can indicate overfitting, although it is not by itself a formal overfitting test.
+- **Model selection:** the app lets you choose the criterion rather than silently declaring one algorithm universally superior.
+""")
 
 st.subheader("4️⃣ Hybrid incremental value")
-linear_row = comparison.loc[comparison["Model"] == "Linear Regression"].iloc[0]
-hybrid_row = comparison.loc[comparison["Model"] == "Linear + AI Residual Hybrid"].iloc[0]
-rmse_change = linear_row["RMSE"] - hybrid_row["RMSE"]
-mae_change = linear_row["MAE"] - hybrid_row["MAE"]
-rmse_pct = 100 * rmse_change / linear_row["RMSE"] if linear_row["RMSE"] else np.nan
+if "Linear Regression" in comparison["Model"].values and "Linear + AI Residual Hybrid" in comparison["Model"].values:
+    linear_row = comparison.loc[comparison["Model"] == "Linear Regression"].iloc[0]
+    hybrid_row = comparison.loc[comparison["Model"] == "Linear + AI Residual Hybrid"].iloc[0]
+    rmse_change = linear_row["RMSE"] - hybrid_row["RMSE"]
+    mae_change = linear_row["MAE"] - hybrid_row["MAE"]
+    rmse_pct = 100 * rmse_change / linear_row["RMSE"] if linear_row["RMSE"] else np.nan
 
-c1, c2, c3 = st.columns(3)
-c1.metric("Linear RMSE", f"{linear_row['RMSE']:.6f}")
-c2.metric("Hybrid RMSE", f"{hybrid_row['RMSE']:.6f}")
-c3.metric("Hybrid RMSE change", f"{rmse_pct:+.2f}%" if np.isfinite(rmse_pct) else "N/A")
+    c1, c2, c3 = st.columns(3)
+    c1.metric("Linear RMSE", f"{linear_row['RMSE']:.6f}")
+    c2.metric("Hybrid RMSE", f"{hybrid_row['RMSE']:.6f}")
+    c3.metric("Hybrid RMSE improvement", f"{rmse_pct:+.2f}%" if np.isfinite(rmse_pct) else "N/A")
 
-st.write(
-    f"**RMSE change:** {rmse_change:.6f}  |  "
-    f"**MAE change:** {mae_change:.6f}"
-)
-st.caption(
-    "Positive RMSE/MAE change means the hybrid had lower error on this test split. "
-    "It does not guarantee improvement on future data."
-)
+    st.write(
+        f"**RMSE improvement:** {rmse_change:.6f}  |  "
+        f"**MAE improvement:** {mae_change:.6f}"
+    )
+    st.caption(
+        "A positive improvement means the hybrid had lower error than linear regression on this test split. "
+        "This does not establish that the hybrid will outperform other models or future datasets."
+    )
+else:
+    st.info("Hybrid incremental-value analysis requires both Linear Regression and Linear + AI Residual Hybrid to be selected.")
 
 st.subheader("5️⃣ Actual vs predicted")
 fig, ax = plt.subplots(figsize=(10, 6))
@@ -475,7 +630,18 @@ ax.grid(axis="y", alpha=0.25)
 st.pyplot(fig)
 plt.close(fig)
 
-st.subheader("7️⃣ Test-set prediction table")
+st.subheader("7️⃣ Cross-validation performance")
+cv_plot = comparison.sort_values("CV RMSE")
+fig, ax = plt.subplots(figsize=(10, 6))
+ax.bar(cv_plot["Model"], cv_plot["CV RMSE"], yerr=cv_plot["CV RMSE SD"].fillna(0), capsize=4)
+ax.set_ylabel("Mean CV RMSE")
+ax.set_title("Cross-validation RMSE on the Training Set")
+ax.tick_params(axis="x", rotation=45)
+ax.grid(axis="y", alpha=0.25)
+st.pyplot(fig)
+plt.close(fig)
+
+st.subheader("8️⃣ Test-set prediction table")
 prediction_table = X_test.reset_index(drop=True).copy()
 prediction_table.insert(0, "Actual", y_test.reset_index(drop=True))
 for name, pred in predictions.items():
@@ -484,7 +650,7 @@ prediction_table["Hybrid Residual Correction"] = residual_test_pred
 st.dataframe(prediction_table, use_container_width=True)
 
 # OLS diagnostics are provided only when all selected predictors can be represented numerically.
-st.subheader("8️⃣ Statistical diagnostics for the linear model")
+st.subheader("9️⃣ Statistical diagnostics for the linear model")
 
 diagnostics_rows = []
 coef_df = pd.DataFrame()
@@ -598,7 +764,7 @@ except Exception as e:
 
 diagnostics_df = pd.DataFrame(diagnostics_rows)
 
-st.subheader("9️⃣ Download your results")
+st.subheader("🔟 Download your complete statistical report")
 st.download_button(
     "⬇️ Download model comparison CSV",
     comparison.to_csv(index=False).encode("utf-8"),
@@ -616,6 +782,36 @@ st.download_button(
     make_excel(comparison, prediction_table, coef_df, vif_df, diagnostics_df),
     "statistical_ai_hybrid_results.xlsx",
     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+)
+
+report_text = f"""Statistical–AI Regression Analysis Report
+
+Outcome: {y_col}
+Predictors: {', '.join(x_cols)}
+Usable observations: {len(y)}
+Training observations: {len(y_train)}
+Test observations: {len(y_test)}
+Test-set proportion: {test_size:.2f}
+Random seed: {int(random_state)}
+Cross-validation folds: {int(n_splits)}
+
+Selected model: {selected_final_model}
+Selection criterion: {selection_criterion}
+
+Model performance:
+{comparison[report_cols].to_string(index=False)}
+
+Interpretation:
+Lower RMSE and MAE indicate smaller prediction errors. Higher R² indicates greater explained variation relative to the test-set mean baseline. Cross-validation summarizes training-set validation performance, while the hold-out test set provides the final independent performance check for this split.
+
+Important limitation:
+Model performance is dataset- and validation-design dependent. The selected model is not universally optimal. Statistical inference additionally depends on model specification and assumptions.
+"""
+st.download_button(
+    "⬇️ Download statistical report (TXT)",
+    report_text.encode("utf-8"),
+    "statistical_ai_full_report.txt",
+    "text/plain"
 )
 
 st.divider()
