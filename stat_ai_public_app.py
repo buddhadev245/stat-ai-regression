@@ -116,7 +116,9 @@ with st.sidebar:
     st.subheader('Variables')
 y_col=st.selectbox('Outcome / dependent variable (Y)',nums)
 avail=[c for c in df.columns if c!=y_col]
-default=[c for c in avail if c in nums][:5] or avail[:min(5,len(avail))]
+id_names={'id','identifier','employee_id','student_id','customer_id','record_id','serial_no','serial_number','roll_no','roll_number','index','row_id'}
+non_id=[c for c in avail if str(c).strip().lower().replace(' ','_') not in id_names]
+default=[c for c in non_id if c in nums][:5] or non_id[:min(5,len(non_id))] or avail[:min(5,len(avail))]
 x_cols=st.multiselect('Predictors / independent variables (X)',avail,default=default)
 if not x_cols: st.warning('Select at least one predictor.'); st.stop()
 y=clean_target(df,y_col); valid=y.notna(); X=df.loc[valid,x_cols].reset_index(drop=True); y=y.loc[valid].reset_index(drop=True)
@@ -164,8 +166,43 @@ elif criterion=='Test MAE': selected_model=comparison.loc[comparison.MAE.idxmin(
 else: selected_model=comparison.loc[comparison['R²'].idxmax(),'Model']
 selrow=comparison[comparison.Model==selected_model].iloc[0]
 
+# ----------------------------- full-data model results -----------------------------
+# In-sample/full-data results: each model is fitted on all usable observations
+# and evaluated on those same observations. Keep these separate from hold-out results.
+full_preds={}; full_rows=[]
+for name,est in models.items():
+    ff=clone(est); ff.fit(X,y); pp=ff.predict(X); full_preds[name]=pp
+    mm=metrics(y,pp)
+    full_rows.append({'Model':name,'Type':'AI' if name in ['Random Forest','Gradient Boosting'] else 'Statistical','RMSE':mm['RMSE'],'MAE':mm['MAE'],'R²':mm['R²']})
+full_hyb_base=pipe(LinearRegression(),X)
+full_hyb_res=pipe(GradientBoostingRegressor(n_estimators=int(gb_trees),learning_rate=.05,max_depth=3,random_state=int(seed)),X)
+full_hyb_base_fit,full_hyb_res_fit,full_hyb_pred,full_oof=hybrid_fit(full_hyb_base,full_hyb_res,X,y,X,int(folds),int(seed))
+full_preds['Linear + AI Residual Hybrid']=full_hyb_pred
+fmh=metrics(y,full_hyb_pred)
+full_rows.append({'Model':'Linear + AI Residual Hybrid','Type':'Hybrid','RMSE':fmh['RMSE'],'MAE':fmh['MAE'],'R²':fmh['R²']})
+full_comparison=pd.DataFrame(full_rows).sort_values('RMSE').reset_index(drop=True)
+
+# Full-data OLS for the same selected X specification.
+Xfull_diag=pd.DataFrame(index=X.index)
+for c in x_cols:
+    if pd.api.types.is_numeric_dtype(X[c]):
+        Xfull_diag[c]=pd.to_numeric(X[c],errors='coerce')
+    else:
+        Xfull_diag=pd.concat([Xfull_diag,pd.get_dummies(X[c].astype('string').fillna('Missing'),prefix=c,drop_first=True,dtype=float)],axis=1)
+Xfull_diag=Xfull_diag.replace([np.inf,-np.inf],np.nan)
+for c in Xfull_diag.columns:
+    if Xfull_diag[c].isna().any(): Xfull_diag[c]=Xfull_diag[c].fillna(Xfull_diag[c].median())
+Xfull_diag=Xfull_diag.loc[:,Xfull_diag.nunique()>1]
+full_ols=None; full_coef=pd.DataFrame()
+try:
+    full_ols=sm.OLS(y,sm.add_constant(Xfull_diag.astype(float),has_constant='add')).fit()
+    fconf=full_ols.conf_int()
+    full_coef=pd.DataFrame({'Variable':full_ols.params.index,'Coefficient':full_ols.params.values,'Std. Error':full_ols.bse.values,'t':full_ols.tvalues.values,'p-value':full_ols.pvalues.values,'95% CI Lower':fconf[0].values,'95% CI Upper':fconf[1].values})
+except Exception:
+    pass
+
 # ----------------------------- tabs -----------------------------
-tabs=st.tabs(['🏠 Overview','📁 Data & EDA','📚 Theory & Model Flowcharts','📈 Predictive Results','🔬 Hybrid Analysis','🩺 Diagnostics & Inference','💡 Results Interpretation','🎨 Chart Studio','📄 Report & Export'])
+tabs=st.tabs(['🏠 Overview','📁 Data & EDA','📊 Full Data Results','📚 Theory, Workflow & Models','📈 Predictive Results','🔬 Hybrid Analysis','🩺 Diagnostics & Inference','💡 Results Interpretation','🎨 Chart Studio','📄 Report & Export'])
 
 with tabs[0]:
     st.markdown('<div class="card"><h2>Analysis overview</h2><p>This dashboard follows a transparent workflow: inspect the data, understand relationships, fit statistical and AI models, evaluate out-of-sample performance, examine the hybrid residual component, check statistical diagnostics, and interpret the complete evidence.</p></div>',unsafe_allow_html=True)
@@ -173,6 +210,8 @@ with tabs[0]:
     st.markdown('### Current specification')
     st.write(f'**Outcome (Y):** `{y_col}`')
     st.write('**Predictors (X):** '+', '.join(f'`{c}`' for c in x_cols))
+    st.markdown('### Full-data results vs predictive results')
+    st.write('The **Full Data Results** tab fits every selected statistical, AI and hybrid model on all usable observations and reports in-sample RMSE, MAE and R². The **Predictive Results** tab separately reports cross-validation and untouched-test performance.')
     st.markdown('### What the platform does not assume')
     st.info('A flexible AI model is not automatically better. A hybrid model is not automatically better. Statistical significance is not the same as predictive accuracy. The final interpretation should consider validation, diagnostics, uncertainty and the scientific context.')
 
@@ -186,6 +225,47 @@ with tabs[1]:
     with t3: st.dataframe(df[x_cols+[y_col]].describe(include='all').T,use_container_width=True)
 
 with tabs[2]:
+    st.subheader('📊 Full-data regression & AI results')
+    st.caption('All models below are fitted using all usable observations and evaluated on those same observations. These are in-sample/full-data results. They describe fit to the observed dataset and are not independent evidence of future generalisation.')
+    a,b,c,d=st.columns(4)
+    if full_ols is not None:
+        a.metric('OLS R²',f'{full_ols.rsquared:.4f}')
+        b.metric('OLS adjusted R²',f'{full_ols.rsquared_adj:.4f}')
+        c.metric('OLS F-statistic',f'{full_ols.fvalue:.3f}')
+        d.metric('OLS observations',f'{int(full_ols.nobs):,}')
+    else:
+        a.metric('OLS R²','N/A'); b.metric('OLS adjusted R²','N/A'); c.metric('OLS F-statistic','N/A'); d.metric('OLS observations',f'{len(y):,}')
+    st.markdown('### Full-data regression and AI comparison')
+    st.write('Every selected model is refitted using **all usable observations**. This provides a complete in-sample comparison of statistical, regularised, AI and hybrid models. It is intentionally separate from the untouched-test results.')
+    st.dataframe(full_comparison.style.format({'RMSE':'{:.4f}','MAE':'{:.4f}','R²':'{:.4f}'}),use_container_width=True,hide_index=True)
+    fa,fb,fc=st.columns(3)
+    full_best_rmse=full_comparison.loc[full_comparison.RMSE.idxmin()]
+    full_best_r2=full_comparison.loc[full_comparison['R²'].idxmax()]
+    fa.metric('Lowest full-data RMSE',full_best_rmse['Model'])
+    fb.metric('Lowest full-data RMSE value',f"{full_best_rmse.RMSE:.4f}")
+    fc.metric('Highest full-data R²',f"{full_best_r2['R²']:.4f}")
+    fig=px.bar(full_comparison.sort_values('RMSE'),x='Model',y='RMSE',color='Type',title='Full-data RMSE — in-sample fit',text_auto='.3f')
+    fig.update_layout(template='plotly_white',height=500,xaxis_tickangle=-35)
+    st.plotly_chart(fig,use_container_width=True)
+    st.markdown('### Full-data AI and hybrid comparison')
+    ai_full=full_comparison[full_comparison['Type'].isin(['AI','Hybrid'])].copy()
+    if not ai_full.empty:
+        st.dataframe(ai_full.style.format({'RMSE':'{:.4f}','MAE':'{:.4f}','R²':'{:.4f}'}),use_container_width=True,hide_index=True)
+        fig_ai=px.bar(ai_full,x='Model',y='R²',color='Type',text_auto='.4f',title='AI and hybrid full-data R² — in-sample')
+        fig_ai.update_layout(template='plotly_white',height=420)
+        st.plotly_chart(fig_ai,use_container_width=True)
+    st.markdown('### Full-data OLS regression')
+    if full_ols is not None:
+        q1,q2,q3=st.columns(3)
+        q1.metric('R²',f'{full_ols.rsquared:.6f}')
+        q2.metric('Adjusted R²',f'{full_ols.rsquared_adj:.6f}')
+        q3.metric('Model p-value',f'{full_ols.f_pvalue:.3g}')
+        st.dataframe(full_coef,use_container_width=True,hide_index=True)
+    else:
+        st.warning('Full-data OLS could not be estimated for this specification.')
+    st.info('AI and hybrid metrics here are in-sample. Use Predictive Results for cross-validation and untouched-test evidence.')
+
+with tabs[3]:
     st.subheader('📚 Theory, mathematical foundation & model flowcharts')
     st.caption('This tab explains what each model is doing, why it is used, and how information moves from data to prediction.')
 
@@ -199,70 +279,98 @@ with tabs[2]:
         </div>
         """, unsafe_allow_html=True)
 
-        # Visual flowchart
-        # Horizontal workflow: every stage is arranged left-to-right to reduce visual complexity.
-        nodes = [
-            ("1\nData",0,1),
-            ("2\nQuality\ncheck",1,1),
-            ("3\nEDA",2,1),
-            ("4\nTrain / Test\nsplit",3,1),
-            ("5\nStatistical\nmodels",4,1),
-            ("6\nAI\nmodels",5,1),
-            ("7\nHybrid\nmodel",6,1),
-            ("8\nCross-\nvalidation",7,1),
-            ("9\nFinal\ntest",8,1),
-            ("10\nDiagnostics",9,1),
-            ("11\nInterpretation",10,1),
-            ("12\nResearch\nreport",11,1)
-        ]
-        edge_pairs=[(i,i+1) for i in range(len(nodes)-1)]
-        fig=go.Figure()
-        for a,b in edge_pairs:
-            x0,y0=nodes[a][1],nodes[a][2]; x1,y1=nodes[b][1],nodes[b][2]
-            fig.add_annotation(x=x1,y=y1,ax=x0,ay=y0,xref='x',yref='y',axref='x',ayref='y',
-                               showarrow=True,arrowhead=3,arrowsize=1,arrowwidth=2,arrowcolor='#7b8f98')
-        for label,xv,yv in nodes:
-            fig.add_trace(go.Scatter(x=[xv],y=[yv],mode='markers+text',
-                marker=dict(size=54,line=dict(width=2,color='#176b87'),color='#eaf6f9'),
-                text=[label],textposition='middle center',hoverinfo='skip',showlegend=False))
-        fig.update_xaxes(visible=False,range=[-.7,11.7]); fig.update_yaxes(visible=False,range=[.2,1.8])
-        fig.update_layout(height=260,template='plotly_white',margin=dict(l=15,r=15,t=20,b=20))
-        st.plotly_chart(fig,use_container_width=True)
+        # Robust horizontal workflow: fixed-width cards inside a true horizontal scroller.
+        workflow=[
+            ("1","Data","Upload dataset; define Y and X variables."),("2","Quality Check","Check types, missing values, IDs and usable rows."),("3","EDA","Study distributions, relationships and correlations."),("4","Train / Test","Reserve a final test set before model comparison."),("5","Statistical Models","Fit linear, polynomial and regularised models."),("6","AI Models","Learn nonlinearities and interactions with ensembles."),("7","Hybrid","Add an AI correction to systematic statistical residuals."),("8","Cross-Validation","Estimate training-data performance and variability."),("9","Final Test","Evaluate selected workflows on untouched observations."),("10","Diagnostics","Check multicollinearity, residuals and generalisation."),("11","Interpretation","Separate prediction, inference and hybrid evidence."),("12","Research Report","Document methods, results, limitations and outputs.")]
+        cards=[]
+        for i,(num,title,desc) in enumerate(workflow):
+            cards.append('<div class="wf-stage"><div class="wf-card"><div class="wf-num">'+num+'</div><div class="wf-title">'+title+'</div><div class="wf-desc">'+desc+'</div></div></div>')
+            if i<len(workflow)-1: cards.append('<div class="wf-arrow">→</div>')
+        workflow_html = '''<div class="wf-viewport"><div class="wf-track">''' + ''.join(cards) + '''</div></div>
+        <div class="workflow-note"><b>Read left → right.</b> Scroll horizontally if needed. The final test data remain separate from fitting and model-selection decisions.</div>
+        <style>
+        .wf-viewport{width:100%;overflow-x:auto;overflow-y:hidden;padding:16px 6px 20px;box-sizing:border-box;border-radius:14px;background:#fbfdfe;border:1px solid #d9e8ee;}
+        .wf-track{display:flex;flex-direction:row;flex-wrap:nowrap;align-items:stretch;width:max-content;min-width:max-content;padding:2px 8px;box-sizing:border-box;}
+        .wf-stage{flex:0 0 180px;width:180px;}
+        .wf-card{width:180px;min-height:150px;box-sizing:border-box;padding:15px 12px;border:2px solid #176b87;border-radius:16px;background:#f6fbfd;box-shadow:0 4px 12px rgba(23,107,135,.12);text-align:center;display:flex;flex-direction:column;justify-content:center;}
+        .wf-num{width:34px;height:34px;margin:0 auto 9px;border-radius:50%;background:#176b87;color:#fff;font-weight:800;font-size:14px;line-height:34px;}
+        .wf-title{font-size:14px;line-height:1.25;font-weight:800;color:#17324d;margin-bottom:8px;white-space:normal;}
+        .wf-desc{font-size:11px;line-height:1.4;color:#536574;white-space:normal;}
+        .wf-arrow{flex:0 0 48px;width:48px;display:flex;align-items:center;justify-content:center;color:#176b87;font-size:30px;font-weight:800;}
+        .workflow-note{margin-top:10px;padding:12px 15px;border-radius:10px;background:#eaf3ff;color:#15508a;font-size:13px;}
+        </style>'''
+        st.markdown(workflow_html,unsafe_allow_html=True)
         st.info('The final test set is kept separate from model fitting and model-selection decisions. Cross-validation is performed within the training data.')
+        st.markdown('### Complete workflow — how each stage works')
+        workflow_details = [
+            ('1. Data', 'Load the dataset, define the outcome Y and candidate predictors X, identify the scientific question, and decide whether the goal is explanation, prediction, or both.'),
+            ('2. Quality check', 'Inspect data types, missing values, impossible values, duplicates, identifier fields, constant variables and usable observations. Identifier columns such as Employee_ID are not treated as substantive predictors by default.'),
+            ('3. EDA', 'Study distributions, scatterplots, group patterns, correlations and possible nonlinear relationships. EDA informs model specification but should not be used to leak information from the final test set.'),
+            ('4. Train/test split', 'Create the training sample and keep the final test sample untouched. The test set is reserved for a final estimate of out-of-sample performance.'),
+            ('5. Statistical models', 'Fit Linear, Polynomial, Ridge, Lasso and Elastic Net models. These provide interpretable baselines and different forms of controlled complexity or regularisation.'),
+            ('6. AI models', 'Fit Random Forest and Gradient Boosting models to capture nonlinearities and interactions that a simple parametric model may not represent.'),
+            ('7. Hybrid model', 'Fit the statistical base, generate out-of-fold residuals, train an AI residual learner, refit the base model, and add the learned residual correction to the base prediction.'),
+            ('8. Cross-validation', 'Within the training data, repeatedly fit and validate models across folds. Report mean performance and fold-to-fold variability rather than relying on one split alone.'),
+            ('9. Final test', 'After modelling and selection decisions, evaluate the chosen workflow on observations that were not used for fitting or model selection. This is the primary check of generalisation in this app.'),
+            ('10. Diagnostics', 'Examine multicollinearity, residual behaviour, heteroscedasticity, coefficient uncertainty, overfitting indicators and train-to-test gaps.'),
+            ('11. Interpretation', 'Separate predictive accuracy, statistical inference and hybrid incremental value. Explain uncertainty and limitations rather than treating one metric as the complete answer.'),
+            ('12. Research report', 'Record data, preprocessing, model settings, equations, validation design, full-data results, test results, diagnostics, interpretation and limitations so the analysis can be reproduced.')]
+        for title,desc in workflow_details:
+            st.markdown(f'**{title}** — {desc}')
+        st.markdown('### End-to-end decision logic')
+        st.markdown('`Data → Quality → EDA → Training set → Candidate models → Cross-validation → Model selection → Untouched final test → Diagnostics → Interpretation → Report`')
+        st.markdown('### What happens to information at each stage')
+        st.markdown('- **Observed outcome information:** used for fitting only inside the relevant training folds.  \n- **Validation information:** used to compare models during cross-validation.  \n- **Final test information:** not used for fitting or selection; it is used only for final performance assessment.  \n- **Inference information:** full-data OLS is reported separately because coefficient inference and out-of-sample prediction answer different questions.')
+        st.markdown('### Model-to-prediction flow')
+        st.markdown('**Linear:** Data → specify model → estimate coefficients → fitted values → residual diagnostics → prediction.  \n**Polynomial:** Data → create powers/interactions → estimate coefficients → prediction → validation.  \n**Ridge/Lasso/Elastic Net:** Data → scale/prepare predictors → penalised estimation → shrinkage/selection → prediction.  \n**Random Forest:** Data → bootstrap/random feature subsets → many decision trees → aggregate tree predictions → final prediction.  \n**Gradient Boosting:** Data → initial prediction → calculate errors → fit next tree to errors → update ensemble → repeat → final prediction.  \n**Hybrid:** Data → statistical base model → out-of-fold residuals → AI residual learner → base prediction + residual correction → hybrid prediction → validation.')
 
     with theory_tabs[1]:
         st.markdown("### 1. Linear Regression")
         st.latex(r"Y = \beta_0+\beta_1X_1+\cdots+\beta_pX_p+\varepsilon")
         st.write("Estimates a systematic linear relationship between predictors and the outcome. Coefficients describe the expected change in the outcome associated with a one-unit change in a predictor, conditional on the other included variables.")
         st.markdown("**Flow:** `X variables → linear equation → estimated coefficients → prediction`")
+        st.markdown('**How it works:** define Y and X → specify the linear conditional mean → estimate coefficients by least squares → produce fitted values and residuals → check assumptions → evaluate predictions on held-out data.')
+        st.markdown('**Interpretation:** βj is the estimated conditional change in Y for a one-unit increase in Xj, holding the other included predictors constant. Statistical significance depends on the fitted model and its assumptions; it does not establish causality.')
 
         st.markdown("### 2. Polynomial Regression")
         st.latex(r"Y=\beta_0+\beta_1X+\beta_2X^2+\cdots+\varepsilon")
         st.write("Extends a linear model by adding powers of predictors so that curved relationships can be represented.")
         st.markdown("**Flow:** `X → polynomial terms → linear estimation → nonlinear-shaped prediction`")
+        st.markdown('**How it works:** create X²/X³ terms → fit the expanded linear model → represent curvature → check whether added complexity improves validation performance.')
+        st.markdown('**Why use it:** it allows smooth curvature while remaining estimable with linear least-squares machinery. Higher degree increases flexibility and can also increase instability or overfitting.')
 
         st.markdown("### 3. Ridge Regression")
         st.latex(r"\min_{\beta}\left[\sum_i(y_i-\hat y_i)^2+\lambda\sum_j\beta_j^2\right]")
         st.write("Adds an L2 penalty to shrink coefficients. It can reduce coefficient instability when predictors are correlated or when many predictors are included.")
         st.markdown("**Flow:** `X → linear model + L2 penalty → shrunk coefficients → prediction`")
+        st.markdown('**How it works:** preprocess X → add an L2 penalty → shrink coefficients → control regularisation strength → validate the resulting predictions.')
+        st.markdown('**Why use it:** shrinkage can improve stability when predictors are correlated or numerous. Coefficients are generally not forced exactly to zero.')
 
         st.markdown("### 4. Lasso Regression")
         st.latex(r"\min_{\beta}\left[\sum_i(y_i-\hat y_i)^2+\lambda\sum_j|\beta_j|\right]")
         st.write("Adds an L1 penalty. Some coefficients can be shrunk exactly to zero, giving a form of variable selection.")
         st.markdown("**Flow:** `X → linear model + L1 penalty → sparse coefficients → prediction`")
+        st.markdown('**How it works:** preprocess X → add an L1 penalty → some coefficients may become zero → obtain a sparse model → validate predictive performance.')
+        st.markdown('**Why use it:** the L1 penalty can produce sparse solutions, which may simplify a high-dimensional model, although selected variables can be unstable under strong correlation.')
 
         st.markdown("### 5. Elastic Net")
         st.latex(r"\min_{\beta}\left[\sum_i(y_i-\hat y_i)^2+\lambda_1\sum_j|\beta_j|+\lambda_2\sum_j\beta_j^2\right]")
         st.write("Combines L1 and L2 regularisation and can be useful when predictors are numerous and/or correlated.")
         st.markdown("**Flow:** `X → L1 + L2 regularisation → stable/sparse solution → prediction`")
+        st.markdown('**How it works:** preprocess X → combine L1 and L2 penalties → balance sparsity and coefficient stability → validate predictions.')
+        st.markdown('**Why use it:** the combination can be useful when predictors are numerous and correlated, balancing shrinkage with the possibility of sparse coefficients.')
 
     with theory_tabs[2]:
         st.markdown("### 6. Random Forest")
         st.write("Builds many decision trees using resampled observations and random subsets of predictors, then aggregates their predictions.")
         st.markdown("**Flow:** `X → many decision trees → aggregate tree predictions → final prediction`")
+        st.markdown('**How it works:** resample observations → grow many trees with random feature selection → generate tree predictions → aggregate them → evaluate on held-out data.')
+        st.markdown('**What it learns:** tree splits partition predictor space into regions with different expected outcomes, allowing nonlinear effects and interactions without specifying them in advance.')
         st.markdown("### 7. Gradient Boosting")
         st.write("Builds trees sequentially. Each new tree is fitted to improve the current ensemble by focusing on remaining prediction errors.")
         st.markdown("**Flow:** `X → initial prediction → residual/error correction → repeated trees → final prediction`")
+        st.markdown('**How it works:** start with an initial prediction → calculate remaining errors → fit a correction tree → update the ensemble → repeat → validate the final model.')
+        st.markdown('**What it learns:** each new tree is a targeted correction to the current ensemble. Learning rate, tree depth and number of trees control the bias–variance trade-off.')
         st.warning("Flexible AI models can capture nonlinearities and interactions, but high flexibility can also increase overfitting risk. Their performance must therefore be evaluated out of sample.")
 
     with theory_tabs[3]:
@@ -284,6 +392,9 @@ with tabs[2]:
         st.latex(r"e_i^{OOF}=Y_i-\hat g^{(-k(i))}(X_i)")
         st.latex(r"\hat Y_H=\hat g(X)+\hat h(X)")
         st.markdown("**Key research idea:** the hybrid is useful only if the residuals contain systematic, generalisable information rather than mainly random noise.")
+        st.markdown('### Hybrid information flow')
+        st.markdown('Original data → statistical base fit → out-of-fold predictions → OOF residuals → AI residual learner → refit base model → base prediction + residual correction → hybrid prediction → out-of-sample evaluation.')
+        st.markdown('**Interpretation:** learnable residual structure can add predictive information; mostly random residuals can cause the AI component to overfit.')
         st.info("Residual hybridisation is an established modelling strategy. The research question is when and under what conditions it adds incremental out-of-sample information.")
 
     with theory_tabs[4]:
@@ -304,7 +415,7 @@ with tabs[2]:
         **Inference layer:** full-data OLS diagnostics answer a different question from hold-out prediction. Coefficients, standard errors, confidence intervals and hypothesis tests should not be inferred automatically for AI components.
         """)
 
-with tabs[3]:
+with tabs[4]:
     st.subheader('📈 Predictive results')
     a,b,c,d=st.columns(4); a.metric('Selected model',selected_model); b.metric('Test RMSE',f"{selrow.RMSE:.4f}"); c.metric('Test MAE',f"{selrow.MAE:.4f}"); d.metric('Test R²',f"{selrow['R²']:.4f}")
     st.caption(f'Model selection criterion: {criterion}. Training observations: {len(ytr):,}; untouched test observations: {len(yte):,}.')
@@ -314,7 +425,7 @@ with tabs[3]:
     long=pd.DataFrame({'Actual':np.tile(yte.to_numpy(),len(preds)),'Predicted':np.concatenate(list(preds.values())),'Model':np.repeat(list(preds.keys()),len(yte))})
     fig=px.scatter(long,x='Actual',y='Predicted',facet_col='Model',facet_col_wrap=2,trendline=None,title='Hold-out test predictions'); mn=min(long.Actual.min(),long.Predicted.min()); mx=max(long.Actual.max(),long.Predicted.max()); fig.add_shape(type='line',x0=mn,x1=mx,y0=mn,y1=mx,line_dash='dash',row='all',col='all'); fig.update_layout(template='plotly_white',height=850); st.plotly_chart(fig,use_container_width=True)
 
-with tabs[4]:
+with tabs[5]:
     st.subheader('🔬 Hybrid model analysis')
     lin=comparison[comparison.Model=='Linear Regression'].iloc[0]; hyb=comparison[comparison.Model=='Linear + AI Residual Hybrid'].iloc[0]
     rmse_imp=lin.RMSE-hyb.RMSE; mae_imp=lin.MAE-hyb.MAE; pct=100*rmse_imp/lin.RMSE
@@ -341,15 +452,14 @@ try:
 except Exception as e:
     osm=None; coef=pd.DataFrame(); anova=pd.DataFrame(); verified=np.nan; bp_p=np.nan
 
-with tabs[5]:
+with tabs[6]:
     st.subheader('🩺 Diagnostics & statistical inference')
     if osm is None: st.warning('OLS diagnostics could not be calculated for this specification.');
     else:
         a,b,c,d,e=st.columns(5); a.metric('Full-data OLS R²',f'{osm.rsquared:.4f}'); b.metric('Adjusted R²',f'{osm.rsquared_adj:.4f}'); c.metric('F-statistic',f'{osm.fvalue:.3f}'); d.metric('Model p-value',f'{osm.f_pvalue:.3g}'); e.metric('OLS observations',f'{int(osm.nobs):,}')
-        st.markdown('### OLS result verification')
-        v1,v2,v3=st.columns(3); v1.metric('Statsmodels R²',f'{osm.rsquared:.6f}'); v2.metric('Reproduced R²',f'{verified:.6f}'); v3.metric('Absolute difference',f'{abs(osm.rsquared-verified):.2e}')
-        st.success('✓ R² verification passed: the independently reproduced 1 − SSR/SST value agrees with the OLS result to numerical precision.') if abs(osm.rsquared-verified)<1e-10 else st.warning('R² verification requires review.')
-        with st.expander('OLS coefficients'): st.dataframe(coef,use_container_width=True,hide_index=True)
+        st.markdown('### OLS inference results')
+        st.caption('The OLS section reports the fitted full-data regression and its inferential statistics. The separate Predictive Results tab reports cross-validation and untouched-test performance.')
+        with st.expander('OLS coefficients', expanded=True): st.dataframe(coef,use_container_width=True,hide_index=True)
         with st.expander('ANOVA'): st.dataframe(anova,use_container_width=True,hide_index=True)
         st.markdown('### Multicollinearity')
         if Xdiag.shape[1]>=2:
@@ -365,7 +475,7 @@ with tabs[5]:
         with st.expander('Why OLS R² and predictive R² do not need to match',expanded=True):
             st.write(f'OLS inference uses all {len(y):,} usable observations. Predictive evaluation fits models on {len(ytr):,} training observations and evaluates them on {len(yte):,} untouched test observations. They answer different questions, so different R² values are expected.')
 
-with tabs[6]:
+with tabs[7]:
     st.subheader('💡 Results interpretation — what the numbers mean')
     st.caption('Interpretation is generated from the current dataset and validation results. It is conditional on the chosen variables, preprocessing, model settings and validation design.')
 
@@ -462,7 +572,7 @@ with tabs[6]:
         """)
         st.info("The platform is designed to support transparent comparison rather than a blind 'best model' decision.")
 
-with tabs[7]:
+with tabs[8]:
     st.subheader('🎨 Chart Studio')
     st.caption('Choose what you want to visualise. This section is independent from the model-selection criterion.')
     chart=st.selectbox('Chart preference',['Scatter plot','Histogram','Box plot','Bar chart','Line / trend','Correlation heatmap','Prediction error distribution','CV RMSE with uncertainty'])
@@ -486,7 +596,7 @@ with tabs[7]:
         p=comparison.sort_values('CV RMSE'); fig=go.Figure(go.Bar(x=p.Model,y=p['CV RMSE'],error_y=dict(type='data',array=p['CV RMSE SD'].fillna(0)))); fig.update_layout(title='Mean cross-validation RMSE ± SD',template='plotly_white')
     fig.update_layout(template='plotly_white',height=600,margin=dict(l=20,r=20,t=70,b=30)); st.plotly_chart(fig,use_container_width=True)
 
-with tabs[8]:
+with tabs[9]:
     st.subheader('📄 Research report & export')
     pred_table=Xte.reset_index(drop=True).copy(); pred_table.insert(0,'Actual',yte.reset_index(drop=True));
     for m,p in preds.items(): pred_table[f'Predicted — {m}']=p
@@ -498,10 +608,10 @@ with tabs[8]:
     c3.download_button('⬇️ Download research report TXT',report_text.encode(),file_name='statistical_ai_report.txt',mime='text/plain')
     excel=io.BytesIO()
     with pd.ExcelWriter(excel,engine='openpyxl') as w:
-        df.to_excel(w,'Data',index=False); comparison.to_excel(w,'Model Comparison',index=False); pred_table.to_excel(w,'Test Predictions',index=False); coef.to_excel(w,'OLS Coefficients',index=False); anova.to_excel(w,'ANOVA',index=False)
+        df.to_excel(w,'Data',index=False); full_comparison.to_excel(w,'Full Data Results',index=False); comparison.to_excel(w,'Model Comparison',index=False); pred_table.to_excel(w,'Test Predictions',index=False); coef.to_excel(w,'OLS Coefficients',index=False); anova.to_excel(w,'ANOVA',index=False)
         if 'vif' in locals() and not vif.empty: vif.to_excel(w,'VIF',index=False)
     st.download_button('📘 Download complete Excel report',excel.getvalue(),file_name='statistical_ai_complete_report.xlsx',mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
     st.markdown('### Reproducibility note')
     st.write('The report records the dataset dimensions, selected variables, validation settings, model settings, model-comparison metrics and inference results. For publication-grade work, retain the original dataset, preprocessing decisions, software versions and the final analysis script alongside the exported report.')
 
-st.divider(); st.caption('StatAI • Statistical–AI Hybrid Modelling Platform • Theory → Modelling → Validation → Diagnostics → Interpretation • Research and educational use')
+st.divider(); st.caption('StatAI v7 • Statistical–AI Hybrid Modelling Platform • Theory → Modelling → Validation → Diagnostics → Interpretation • Research and educational use')
