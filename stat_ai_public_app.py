@@ -3,15 +3,12 @@ import warnings
 import numpy as np
 import pandas as pd
 import streamlit as st
-import matplotlib.pyplot as plt
-import statsmodels.api as sm
 import plotly.express as px
 import plotly.graph_objects as go
-
+import statsmodels.api as sm
 from scipy import stats
 from statsmodels.stats.outliers_influence import variance_inflation_factor
 from statsmodels.stats.diagnostic import het_breuschpagan
-
 from sklearn.base import clone
 from sklearn.compose import ColumnTransformer
 from sklearn.impute import SimpleImputer
@@ -23,1067 +20,449 @@ from sklearn.ensemble import RandomForestRegressor, GradientBoostingRegressor
 from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
 
 warnings.filterwarnings("ignore")
-
-st.set_page_config(
-    page_title="StatAI — Statistical & AI Regression Analyzer",
-    page_icon="📊",
-    layout="wide",
-    initial_sidebar_state="expanded",
-)
+st.set_page_config(page_title="StatAI | Statistical–AI Hybrid Modelling", page_icon="📊", layout="wide", initial_sidebar_state="expanded")
 
 st.markdown("""
 <style>
-:root { --stat-accent: #176b87; --stat-accent-dark: #0d4f66; }
-.block-container { padding-top: 2rem; padding-bottom: 3rem; max-width: 1450px; }
-.main-title { font-size: clamp(1.8rem, 4vw, 3rem); font-weight: 800; letter-spacing: -0.04em; line-height: 1.1; margin-bottom: .35rem; color: #123746; }
-.subtitle { font-size: 1.08rem; color: #52636b; margin-bottom: 1.25rem; max-width: 900px; }
-.hero { padding: 1.35rem 1.5rem; border-radius: 18px; background: linear-gradient(135deg, #e9f5f8 0%, #f8fbfc 100%); border: 1px solid #c9e3ea; margin-bottom: 1.25rem; }
-.hero-kicker { text-transform: uppercase; letter-spacing: .12em; font-size: .75rem; font-weight: 800; color: #176b87; margin-bottom: .45rem; }
-.section-label { font-size: .78rem; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; color: #176b87; margin-top: .8rem; }
-.workflow-strip { display:flex; flex-wrap:wrap; gap:.45rem; padding:.75rem 0 1rem 0; margin-bottom:.5rem; }
-.workflow-strip span { padding:.38rem .7rem; border:1px solid #d9e7ed; border-radius:999px; background:#f7fbfd; color:#28576a; font-size:.78rem; font-weight:700; }
-.step-card { padding: 1rem 1.15rem; border: 1px solid #dce7eb; border-radius: 14px; margin-bottom: .75rem; background: #ffffff; }
-.small-note { font-size: .9rem; color: #66777e; }
-div[data-testid="stMetric"] { background: #f6fafb; border: 1px solid #dcecef; padding: .8rem 1rem; border-radius: 13px; }
-div[data-testid="stMetricValue"] { color: #123746; }
-.stButton > button { border-radius: 10px; font-weight: 700; }
-[data-testid="stSidebar"] { background: linear-gradient(180deg, #f4f8fa 0%, #eef5f7 100%); border-right: 1px solid #d9e6ea; }
-[data-testid="stTabs"] button { font-weight: 700; }
-.analysis-card { padding: 1.05rem 1.2rem; border: 1px solid #d9e7eb; border-radius: 16px; background: linear-gradient(180deg,#ffffff 0%,#f8fbfc 100%); box-shadow: 0 4px 18px rgba(18,55,70,.05); margin: .5rem 0 1rem 0; }
-.section-title { font-size: 1.35rem; font-weight: 800; color: #123746; margin-top: .25rem; }
-.section-subtitle { color: #60737b; margin-bottom: .85rem; }
-.chart-note { background:#f3f8fa; border-left:4px solid #176b87; padding:.7rem .9rem; border-radius:8px; color:#52636b; font-size:.9rem; }
+.block-container{max-width:1500px;padding-top:1.6rem;padding-bottom:3rem}
+.hero{padding:1.7rem 1.8rem;border:1px solid #cfe2e8;border-radius:22px;background:linear-gradient(135deg,#edf8fb,#ffffff);margin-bottom:1rem}
+.kicker{font-size:.75rem;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:#176b87}.title{font-size:clamp(2rem,4vw,3.2rem);font-weight:850;letter-spacing:-.045em;color:#123746;line-height:1.05}.subtitle{font-size:1.05rem;color:#5b6d74;max-width:1000px;margin-top:.5rem}
+.card{padding:1.15rem 1.3rem;border:1px solid #dce8ec;border-radius:16px;background:#fff;box-shadow:0 4px 18px rgba(18,55,70,.05);margin:.6rem 0 1rem}
+.muted{color:#64757c}.pill{display:inline-block;padding:.35rem .7rem;border-radius:999px;background:#f1f8fa;border:1px solid #d7e8ed;color:#28576a;font-weight:700;font-size:.8rem;margin:.15rem}
+[data-testid="stSidebar"]{background:linear-gradient(180deg,#f4f8fa,#edf5f7)}
+div[data-testid="stMetric"]{background:#f6fafb;border:1px solid #dcecef;padding:.8rem 1rem;border-radius:13px}
+[data-testid="stTabs"] button{font-weight:750}
+.small{font-size:.88rem;color:#6a7a81}.formula{padding:1rem 1.1rem;background:#f7fbfc;border-left:4px solid #176b87;border-radius:8px;font-family:serif;font-size:1.05rem}
 </style>
 """, unsafe_allow_html=True)
 
-st.markdown("""<div class="hero"><div class="hero-kicker">Research & predictive analytics</div><div class="main-title">📊 Statistical–AI Hybrid Modelling Platform</div><div class="subtitle">A practical environment for prediction, statistical inference, diagnostics, and comparison of statistical, artificial-intelligence, and hybrid regression models.</div></div>""", unsafe_allow_html=True)
+st.markdown('<div class="hero"><div class="kicker">Research • prediction • inference • reproducibility</div><div class="title">📊 Statistical–AI Hybrid Modelling Platform</div><div class="subtitle">A professional browser-based workspace for exploratory analysis, statistical regression, machine-learning comparison, residual hybrid modelling, diagnostics, interpretation and reproducible reporting.</div></div>', unsafe_allow_html=True)
 
+# ----------------------------- helpers -----------------------------
 def read_uploaded_file(uploaded):
-    name = uploaded.name.lower()
-    if name.endswith(".csv"):
-        return pd.read_csv(uploaded)
-    if name.endswith(".xlsx") or name.endswith(".xls"):
-        return pd.read_excel(uploaded)
-    raise ValueError("Please upload a CSV or Excel file.")
+    n=uploaded.name.lower()
+    if n.endswith('.csv'): return pd.read_csv(uploaded)
+    if n.endswith(('.xlsx','.xls')): return pd.read_excel(uploaded)
+    raise ValueError('Please upload CSV or Excel.')
 
 def coerce_numeric_like(df):
-    out = df.copy()
-    for col in out.columns:
-        if out[col].dtype == "object":
-            converted = pd.to_numeric(
-                out[col].astype(str).str.replace(",", "", regex=False).str.strip(),
-                errors="coerce"
-            )
-            non_missing = out[col].notna().sum()
-            if non_missing and converted.notna().sum() / non_missing >= 0.85:
-                out[col] = converted
+    out=df.copy()
+    for c in out.columns:
+        if out[c].dtype=='object':
+            conv=pd.to_numeric(out[c].astype(str).str.replace(',','',regex=False).str.strip(),errors='coerce')
+            nm=out[c].notna().sum()
+            if nm and conv.notna().sum()/nm>=.85: out[c]=conv
     return out
 
-def clean_target(df, target):
-    y = pd.to_numeric(
-        df[target].astype(str).str.replace(",", "", regex=False).str.strip(),
-        errors="coerce"
-    )
-    return y
-
 def infer_columns(df):
-    numeric, categorical = [], []
+    nums=[]; cats=[]
     for c in df.columns:
-        if pd.api.types.is_numeric_dtype(df[c]):
-            numeric.append(c)
+        if pd.api.types.is_numeric_dtype(df[c]): nums.append(c)
         else:
-            converted = pd.to_numeric(
-                df[c].astype(str).str.replace(",", "", regex=False).str.strip(),
-                errors="coerce"
-            )
-            non_missing = df[c].notna().sum()
-            if non_missing and converted.notna().sum() / non_missing >= 0.85:
-                numeric.append(c)
-            else:
-                categorical.append(c)
-    return numeric, categorical
+            conv=pd.to_numeric(df[c].astype(str).str.replace(',','',regex=False).str.strip(),errors='coerce')
+            nm=df[c].notna().sum()
+            (nums if nm and conv.notna().sum()/nm>=.85 else cats).append(c)
+    return nums,cats
 
-def metric_values(y_true, y_pred):
-    return {
-        "RMSE": float(np.sqrt(mean_squared_error(y_true, y_pred))),
-        "MAE": float(mean_absolute_error(y_true, y_pred)),
-        "R²": float(r2_score(y_true, y_pred)),
-    }
+def clean_target(df,c): return pd.to_numeric(df[c].astype(str).str.replace(',','',regex=False).str.strip(),errors='coerce')
 
 def make_preprocessor(X):
-    numeric_cols = list(X.select_dtypes(include=[np.number]).columns)
-    categorical_cols = [c for c in X.columns if c not in numeric_cols]
+    num=list(X.select_dtypes(include=[np.number]).columns); cat=[c for c in X.columns if c not in num]; tr=[]
+    if num: tr.append(('num',Pipeline([('imputer',SimpleImputer(strategy='median'))]),num))
+    if cat: tr.append(('cat',Pipeline([('imputer',SimpleImputer(strategy='most_frequent')),('onehot',OneHotEncoder(handle_unknown='ignore',sparse_output=False))]),cat))
+    return ColumnTransformer(tr,remainder='drop')
 
-    transformers = []
-    if numeric_cols:
-        transformers.append((
-            "num",
-            Pipeline([
-                ("imputer", SimpleImputer(strategy="median")),
-            ]),
-            numeric_cols
-        ))
-    if categorical_cols:
-        transformers.append((
-            "cat",
-            Pipeline([
-                ("imputer", SimpleImputer(strategy="most_frequent")),
-                ("onehot", OneHotEncoder(handle_unknown="ignore", sparse_output=False)),
-            ]),
-            categorical_cols
-        ))
+def pipe(model,X): return Pipeline([('preprocess',make_preprocessor(X)),('model',model)])
 
-    return ColumnTransformer(transformers=transformers, remainder="drop")
+def metrics(y,p): return {'RMSE':float(np.sqrt(mean_squared_error(y,p))),'MAE':float(mean_absolute_error(y,p)),'R²':float(r2_score(y,p))}
 
-def make_pipeline_model(model, X):
-    return Pipeline([
-        ("preprocess", make_preprocessor(X)),
-        ("model", model),
-    ])
+def hybrid_fit(base,residual,Xtr,ytr,Xte,k,seed):
+    Xtr=Xtr.reset_index(drop=True); ytr=ytr.reset_index(drop=True); oof=np.zeros(len(ytr)); kf=KFold(k,shuffle=True,random_state=seed)
+    for ti,vi in kf.split(Xtr):
+        b=clone(base); b.fit(Xtr.iloc[ti],ytr.iloc[ti]); oof[vi]=ytr.iloc[vi].to_numpy()-b.predict(Xtr.iloc[vi])
+    rm=clone(residual); rm.fit(Xtr,oof); bf=clone(base); bf.fit(Xtr,ytr)
+    return bf,rm,bf.predict(Xte)+rm.predict(Xte),oof
 
-def fit_hybrid_oof(base_estimator, residual_estimator, X_train, y_train,
-                   X_test, n_splits=5, random_state=42):
-    kf = KFold(n_splits=n_splits, shuffle=True, random_state=random_state)
-    Xtr = X_train.reset_index(drop=True)
-    ytr = y_train.reset_index(drop=True)
-    oof_residuals = np.zeros(len(Xtr))
+def safe_rank(series,ascending): return series.rank(method='min',ascending=ascending).astype(int)
 
-    for train_idx, valid_idx in kf.split(Xtr):
-        base_fold = clone(base_estimator)
-        base_fold.fit(Xtr.iloc[train_idx], ytr.iloc[train_idx])
-        pred_valid = base_fold.predict(Xtr.iloc[valid_idx])
-        oof_residuals[valid_idx] = ytr.iloc[valid_idx].to_numpy() - pred_valid
+# ----------------------------- sidebar -----------------------------
+with st.sidebar:
+    st.header('⚙️ Analysis controls')
+    test_size=st.slider('Test-set proportion',.15,.40,.25,.05)
+    seed=st.number_input('Random seed',1,9999,42,1)
+    folds=st.slider('Cross-validation folds',3,10,5,1)
+    st.divider(); st.subheader('Model settings')
+    rf_trees=st.slider('Random Forest trees',100,800,300,50)
+    gb_trees=st.slider('Gradient Boosting trees',50,500,200,25)
+    poly_degree=st.selectbox('Polynomial degree',[2,3],index=0)
+    st.divider(); st.subheader('Model selection')
+    criterion=st.selectbox('Selection criterion',['Cross-validation RMSE','Cross-validation MAE','Cross-validation R²','Test RMSE','Test MAE','Test R²'])
+    selection_mode=st.radio('Final model display',['Automatically select','Choose manually'])
+    st.divider(); st.caption('Privacy: uploaded data are processed for the current analysis session. Avoid confidential or personally identifiable data unless appropriate for your hosting environment.')
 
-    residual_model = clone(residual_estimator)
-    residual_model.fit(Xtr, oof_residuals)
-
-    base_final = clone(base_estimator)
-    base_final.fit(X_train, y_train)
-
-    base_test_pred = base_final.predict(X_test)
-    residual_test_pred = residual_model.predict(X_test)
-    hybrid_pred = base_test_pred + residual_test_pred
-
-    return base_final, residual_model, hybrid_pred, residual_test_pred, oof_residuals
-
-def make_excel(comparison, predictions, coefficients, vif, diagnostics):
-    output = io.BytesIO()
-    with pd.ExcelWriter(output, engine="openpyxl") as writer:
-        comparison.to_excel(writer, sheet_name="Model Comparison", index=False)
-        predictions.to_excel(writer, sheet_name="Test Predictions", index=False)
-        coefficients.to_excel(writer, sheet_name="OLS Coefficients", index=False)
-        diagnostics.to_excel(writer, sheet_name="Diagnostics", index=False)
-        if not vif.empty:
-            vif.to_excel(writer, sheet_name="VIF", index=False)
-    output.seek(0)
-    return output
-
-def safe_numeric_series(s):
-    return pd.to_numeric(
-        s.astype(str).str.replace(",", "", regex=False).str.strip(),
-        errors="coerce"
-    )
+# ----------------------------- upload -----------------------------
+up=st.file_uploader('📥 Upload CSV or Excel dataset',type=['csv','xlsx','xls'],help='Use one numeric outcome and one or more predictors.')
+if up is None:
+    st.info('Upload a dataset to activate the analysis workspace.')
+    st.markdown('<div class="card"><h3>Research workflow</h3><span class="pill">01 Data</span><span class="pill">02 EDA</span><span class="pill">03 Models</span><span class="pill">04 Hybrid</span><span class="pill">05 Diagnostics</span><span class="pill">06 Interpretation</span><span class="pill">07 Report</span><p class="muted">The platform separates predictive evaluation from statistical inference. It does not assume that AI or hybridisation is always superior.</p></div>',unsafe_allow_html=True)
+    st.stop()
+try: df=coerce_numeric_like(read_uploaded_file(up)).replace([np.inf,-np.inf],np.nan)
+except Exception as e: st.error(f'Could not read the dataset: {e}'); st.stop()
+if df.empty: st.error('The uploaded dataset is empty.'); st.stop()
+nums,cats=infer_columns(df)
+if not nums: st.error('No numeric outcome was detected. Regression requires a numeric outcome.'); st.stop()
 
 with st.sidebar:
-    st.header("⚙️ Analysis controls")
-    st.markdown("**Validation**")
-    test_size = st.slider("Test-set proportion", 0.15, 0.40, 0.25, 0.05)
-    random_state = st.number_input("Random seed", 1, 9999, 42, 1)
-    n_splits = st.slider("Cross-validation folds", 3, 10, 5, 1)
+    st.subheader('Variables')
+y_col=st.selectbox('Outcome / dependent variable (Y)',nums)
+avail=[c for c in df.columns if c!=y_col]
+default=[c for c in avail if c in nums][:5] or avail[:min(5,len(avail))]
+x_cols=st.multiselect('Predictors / independent variables (X)',avail,default=default)
+if not x_cols: st.warning('Select at least one predictor.'); st.stop()
+y=clean_target(df,y_col); valid=y.notna(); X=df.loc[valid,x_cols].reset_index(drop=True); y=y.loc[valid].reset_index(drop=True)
+if len(y)<max(30,len(x_cols)+10): st.error('Too few usable observations for a stable regression workflow.'); st.stop()
+if any(X[c].nunique(dropna=True)<2 for c in x_cols): st.error('At least one predictor has fewer than two distinct values.'); st.stop()
 
-    st.markdown("**Model settings**")
-    rf_trees = st.slider("Random Forest trees", 100, 800, 300, 50)
-    gb_trees = st.slider("Gradient Boosting trees", 50, 500, 200, 25)
-    poly_degree = st.selectbox("Polynomial degree", [2, 3], index=0)
+st.success(f'Loaded **{len(df):,} rows × {len(df.columns):,} columns** • **{len(y):,} usable outcomes**')
 
-    st.markdown("**Model selection**")
-    selection_criterion = st.selectbox(
-        "Choose model by",
-        ["Cross-validation RMSE", "Cross-validation MAE", "Cross-validation R²", "Test RMSE", "Test MAE", "Test R²"],
-        index=0,
-        help="For rigorous research, use cross-validation for model selection and reserve the final test set for confirmation."
-    )
-    model_choice = st.radio(
-        "Final model display",
-        ["Automatically select", "Choose manually"],
-        index=0
-    )
+# ----------------------------- tabs -----------------------------
+tabs=st.tabs(['🏠 Overview','📁 Data & EDA','📚 Theory & Model Flowcharts','📈 Predictive Results','🔬 Hybrid Analysis','🩺 Diagnostics & Inference','💡 Results Interpretation','🎨 Chart Studio','📄 Report & Export'])
 
-    st.divider()
-    st.markdown("**Privacy note**")
-    st.caption(
-        "Uploaded data are processed for the current analysis session. "
-        "Do not upload confidential or personally identifiable data unless you are "
-        "comfortable with the hosting environment."
-    )
+with tabs[0]:
+    st.markdown('<div class="card"><h2>Analysis overview</h2><p>This dashboard follows a transparent workflow: inspect the data, understand relationships, fit statistical and AI models, evaluate out-of-sample performance, examine the hybrid residual component, check statistical diagnostics, and interpret the complete evidence.</p></div>',unsafe_allow_html=True)
+    a,b,c,d=st.columns(4); a.metric('Observations',f'{len(y):,}'); b.metric('Predictors',f'{len(x_cols):,}'); c.metric('Numeric predictors',f'{sum(pd.api.types.is_numeric_dtype(X[c]) for c in x_cols):,}'); d.metric('Categorical predictors',f'{sum(not pd.api.types.is_numeric_dtype(X[c]) for c in x_cols):,}')
+    st.markdown('### Current specification')
+    st.write(f'**Outcome (Y):** `{y_col}`')
+    st.write('**Predictors (X):** '+', '.join(f'`{c}`' for c in x_cols))
+    st.markdown('### What the platform does not assume')
+    st.info('A flexible AI model is not automatically better. A hybrid model is not automatically better. Statistical significance is not the same as predictive accuracy. The final interpretation should consider validation, diagnostics, uncertainty and the scientific context.')
 
-with st.container(border=True):
-    st.markdown("""
-    <div class="workflow-strip">
-    <span>01 · Data</span><span>02 · EDA</span><span>03 · Modelling</span><span>04 · Selection</span><span>05 · Hybrid</span><span>06 · Diagnostics</span><span>07 · Report</span>
-    </div>
-    """, unsafe_allow_html=True)
-    st.markdown('<div class="section-label">Step 1 · Data input</div>', unsafe_allow_html=True)
-    st.subheader("Upload your dataset")
-    uploaded_file = st.file_uploader(
-        "Upload CSV or Excel",
-        type=["csv", "xlsx", "xls"],
-        help="Your file should contain one outcome column and one or more predictor columns."
-    )
-    
-    if uploaded_file is None:
-        st.info("👆 Upload a CSV or Excel file to begin.")
+with tabs[1]:
+    st.subheader('📁 Data preview and quality')
+    t1,t2,t3=st.tabs(['Preview','Quality','Descriptive statistics'])
+    with t1: st.dataframe(df.head(25),use_container_width=True,hide_index=True)
+    with t2:
+        q=pd.DataFrame({'Variable':df.columns,'Type':[str(df[c].dtype) for c in df.columns],'Missing':[int(df[c].isna().sum()) for c in df.columns],'Unique':[int(df[c].nunique(dropna=True)) for c in df.columns]})
+        st.dataframe(q,use_container_width=True,hide_index=True)
+    with t3: st.dataframe(df[x_cols+[y_col]].describe(include='all').T,use_container_width=True)
+
+with tabs[2]:
+    st.subheader('📚 Theory, mathematical foundation & model flowcharts')
+    st.caption('This tab explains what each model is doing, why it is used, and how information moves from data to prediction.')
+
+    theory_tabs = st.tabs(['🧭 Overall workflow','📐 Statistical models','🤖 AI models','🔗 Hybrid model','📊 Metrics & validation'])
+
+    with theory_tabs[0]:
         st.markdown("""
-    ### How it works
-    1. **Upload** your dataset.
-    2. **Select Y** — the outcome you want to predict.
-    3. **Select X variables** — the predictors.
-    4. **Run the analysis.**
-    5. **Compare** statistical, AI and hybrid models.
-    6. **Download** the results as CSV or Excel.
-    
-    The application can handle both **numeric and categorical predictors** such as crop, district, region, season, education level, or industry.
-    """)
-        st.stop()
-    
-    try:
-        df_raw = read_uploaded_file(uploaded_file)
-    except Exception as e:
-        st.error(f"Could not read the uploaded file: {e}")
-        st.stop()
-    
-    if df_raw.empty:
-        st.error("The uploaded dataset is empty.")
-        st.stop()
-    
-    df = coerce_numeric_like(df_raw)
-    df = df.replace([np.inf, -np.inf], np.nan)
-    
-    st.success(f"Dataset loaded successfully: **{len(df):,} rows × {len(df.columns):,} columns**")
-    
-    tab1, tab2, tab3 = st.tabs(["📋 Data preview", "🔎 Data quality", "📚 Method guide"])
-    
-    with tab1:
-        st.dataframe(df.head(15), use_container_width=True)
-    
-    with tab2:
-        quality = pd.DataFrame({
-            "Variable": df.columns,
-            "Type": [str(df[c].dtype) for c in df.columns],
-            "Missing": [int(df[c].isna().sum()) for c in df.columns],
-            "Unique values": [int(df[c].nunique(dropna=True)) for c in df.columns],
-        })
-        st.dataframe(quality, use_container_width=True, hide_index=True)
-    
-    with tab3:
+        <div class="card">
+        <h3>Research modelling workflow</h3>
+        <p><b>Data → Quality Check → EDA → Train/Test Split → Statistical Models → AI Models → Hybrid Model → Cross-Validation → Final Test → Diagnostics → Interpretation → Report</b></p>
+        </div>
+        """, unsafe_allow_html=True)
+
+        # Visual flowchart
+        # Horizontal workflow: every stage is arranged left-to-right to reduce visual complexity.
+        nodes = [
+            ("1\nData",0,1),
+            ("2\nQuality\ncheck",1,1),
+            ("3\nEDA",2,1),
+            ("4\nTrain / Test\nsplit",3,1),
+            ("5\nStatistical\nmodels",4,1),
+            ("6\nAI\nmodels",5,1),
+            ("7\nHybrid\nmodel",6,1),
+            ("8\nCross-\nvalidation",7,1),
+            ("9\nFinal\ntest",8,1),
+            ("10\nDiagnostics",9,1),
+            ("11\nInterpretation",10,1),
+            ("12\nResearch\nreport",11,1)
+        ]
+        edge_pairs=[(i,i+1) for i in range(len(nodes)-1)]
+        fig=go.Figure()
+        for a,b in edge_pairs:
+            x0,y0=nodes[a][1],nodes[a][2]; x1,y1=nodes[b][1],nodes[b][2]
+            fig.add_annotation(x=x1,y=y1,ax=x0,ay=y0,xref='x',yref='y',axref='x',ayref='y',
+                               showarrow=True,arrowhead=3,arrowsize=1,arrowwidth=2,arrowcolor='#7b8f98')
+        for label,xv,yv in nodes:
+            fig.add_trace(go.Scatter(x=[xv],y=[yv],mode='markers+text',
+                marker=dict(size=54,line=dict(width=2,color='#176b87'),color='#eaf6f9'),
+                text=[label],textposition='middle center',hoverinfo='skip',showlegend=False))
+        fig.update_xaxes(visible=False,range=[-.7,11.7]); fig.update_yaxes(visible=False,range=[.2,1.8])
+        fig.update_layout(height=260,template='plotly_white',margin=dict(l=15,r=15,t=20,b=20))
+        st.plotly_chart(fig,use_container_width=True)
+        st.info('The final test set is kept separate from model fitting and model-selection decisions. Cross-validation is performed within the training data.')
+
+    with theory_tabs[1]:
+        st.markdown("### 1. Linear Regression")
+        st.latex(r"Y = \beta_0+\beta_1X_1+\cdots+\beta_pX_p+\varepsilon")
+        st.write("Estimates a systematic linear relationship between predictors and the outcome. Coefficients describe the expected change in the outcome associated with a one-unit change in a predictor, conditional on the other included variables.")
+        st.markdown("**Flow:** `X variables → linear equation → estimated coefficients → prediction`")
+
+        st.markdown("### 2. Polynomial Regression")
+        st.latex(r"Y=\beta_0+\beta_1X+\beta_2X^2+\cdots+\varepsilon")
+        st.write("Extends a linear model by adding powers of predictors so that curved relationships can be represented.")
+        st.markdown("**Flow:** `X → polynomial terms → linear estimation → nonlinear-shaped prediction`")
+
+        st.markdown("### 3. Ridge Regression")
+        st.latex(r"\min_{\beta}\left[\sum_i(y_i-\hat y_i)^2+\lambda\sum_j\beta_j^2\right]")
+        st.write("Adds an L2 penalty to shrink coefficients. It can reduce coefficient instability when predictors are correlated or when many predictors are included.")
+        st.markdown("**Flow:** `X → linear model + L2 penalty → shrunk coefficients → prediction`")
+
+        st.markdown("### 4. Lasso Regression")
+        st.latex(r"\min_{\beta}\left[\sum_i(y_i-\hat y_i)^2+\lambda\sum_j|\beta_j|\right]")
+        st.write("Adds an L1 penalty. Some coefficients can be shrunk exactly to zero, giving a form of variable selection.")
+        st.markdown("**Flow:** `X → linear model + L1 penalty → sparse coefficients → prediction`")
+
+        st.markdown("### 5. Elastic Net")
+        st.latex(r"\min_{\beta}\left[\sum_i(y_i-\hat y_i)^2+\lambda_1\sum_j|\beta_j|+\lambda_2\sum_j\beta_j^2\right]")
+        st.write("Combines L1 and L2 regularisation and can be useful when predictors are numerous and/or correlated.")
+        st.markdown("**Flow:** `X → L1 + L2 regularisation → stable/sparse solution → prediction`")
+
+    with theory_tabs[2]:
+        st.markdown("### 6. Random Forest")
+        st.write("Builds many decision trees using resampled observations and random subsets of predictors, then aggregates their predictions.")
+        st.markdown("**Flow:** `X → many decision trees → aggregate tree predictions → final prediction`")
+        st.markdown("### 7. Gradient Boosting")
+        st.write("Builds trees sequentially. Each new tree is fitted to improve the current ensemble by focusing on remaining prediction errors.")
+        st.markdown("**Flow:** `X → initial prediction → residual/error correction → repeated trees → final prediction`")
+        st.warning("Flexible AI models can capture nonlinearities and interactions, but high flexibility can also increase overfitting risk. Their performance must therefore be evaluated out of sample.")
+
+    with theory_tabs[3]:
+        st.markdown("### 8. Linear + AI Residual Hybrid")
+        st.latex(r"Y=m(X)+\varepsilon")
+        st.latex(r"\hat m_H(X)=\hat g(X)+\hat h(X)")
+        st.write("The statistical model first captures an interpretable structural component. An AI learner then attempts to learn systematic information remaining in the statistical residuals.")
+        st.markdown("#### Step-by-step")
         st.markdown("""
-    **Outcome (Y):** the variable you want to predict.
-    
-    **Predictors (X):** variables used to explain or predict Y.
-    
-    **RMSE / MAE:** lower values indicate smaller prediction errors.
-    
-    **R²:** higher values indicate more variance explained on the test data.
-    
-    **Hybrid model:** the statistical model makes a base prediction, then an AI model learns predictable residual structure using out-of-fold residuals.
-    
-    **Important:** model performance is evaluated on data not used to fit the final models. A model with the best result on one split is not automatically the best model for every future dataset.
-    """)
-    
-    numeric_cols, categorical_cols = infer_columns(df)
-    candidate_y = numeric_cols.copy()
-    
-    if not candidate_y:
-        st.error("No numeric outcome variable was detected. The outcome must be numeric for regression.")
-        st.stop()
-    
-    st.subheader("2️⃣ Select outcome and predictors")
-    y_col = st.selectbox(
-        "Outcome / dependent variable (Y)",
-        candidate_y,
-        index=0
-    )
-    
-    available_x = [c for c in df.columns if c != y_col]
-    default_x = [c for c in available_x if c in numeric_cols][:5]
-    if not default_x:
-        default_x = available_x[:min(5, len(available_x))]
-    
-    x_cols = st.multiselect(
-        "Predictors / independent variables (X)",
-        available_x,
-        default=default_x,
-        help="You may select numeric and categorical variables."
-    )
-    
-    if not x_cols:
-        st.warning("Select at least one predictor.")
-        st.stop()
-    
-    y = clean_target(df, y_col)
-    X = df[x_cols].copy()
-    
-    # Remove rows where the target is missing; predictors are imputed inside pipelines.
-    valid_y = y.notna()
-    X = X.loc[valid_y].reset_index(drop=True)
-    y = y.loc[valid_y].reset_index(drop=True)
-    
-    if len(y) < max(30, len(x_cols) + 10):
-        st.error(
-            f"Only {len(y)} usable outcome observations were found. "
-            "Please use a larger dataset (at least about 30 observations is recommended)."
-        )
-        st.stop()
-    
-    constant_x = [c for c in x_cols if X[c].nunique(dropna=True) < 2]
-    if constant_x:
-        st.error("These predictors have fewer than two distinct non-missing values: " + ", ".join(constant_x))
-        st.stop()
-    
-    st.info(
-        f"**Y:** `{y_col}`  |  **X:** {', '.join(x_cols)}  |  "
-        f"**Usable observations:** {len(y):,}"
-    )
-    
-    # -----------------------------------------------------------------------------
-    # MODERN EXPLORATORY CHART STUDIO
-    # -----------------------------------------------------------------------------
-with st.container(border=True):
-    st.markdown('<div class="section-label">Step 3 · Exploratory visual analytics</div>', unsafe_allow_html=True)
-    st.markdown('<div class="section-title">📊 Modern Chart Studio</div>', unsafe_allow_html=True)
-    st.markdown('<div class="section-subtitle">Choose the visual you want to inspect. The chart updates from your uploaded dataset and selected variables.</div>', unsafe_allow_html=True)
-    
-    chart_tab1, chart_tab2, chart_tab3 = st.tabs(["🎨 Custom chart", "🧭 Quick insights", "📐 Correlation"] )
-    
-    with chart_tab1:
-        chart_types = ["Scatter plot", "Histogram / distribution", "Box plot", "Bar chart", "Pie chart", "Line / trend"]
-        chart_type = st.selectbox("Chart preference", chart_types, index=0, key="chart_preference")
-        numeric_all = [c for c in df.columns if pd.api.types.is_numeric_dtype(df[c])]
-        categorical_all = [c for c in df.columns if c not in numeric_all]
-    
-        if chart_type == "Scatter plot":
-            c1, c2, c3 = st.columns(3)
-            x_chart = c1.selectbox("X variable", numeric_all or [y_col], index=0, key="scatter_x")
-            y_chart = c2.selectbox("Y variable", numeric_all or [y_col], index=min(1, len(numeric_all)-1) if numeric_all else 0, key="scatter_y")
-            color_options = ["None"] + categorical_all + numeric_all
-            color_chart = c3.selectbox("Colour by", color_options, key="scatter_color")
-            plot_df = df[[x_chart, y_chart] + ([] if color_chart == "None" else [color_chart])].dropna()
-            fig = px.scatter(plot_df, x=x_chart, y=y_chart, color=None if color_chart == "None" else color_chart, trendline="ols" if len(plot_df) >= 10 else None, title=f"{y_chart} vs {x_chart}")
-            fig.update_layout(height=520, margin=dict(l=20,r=20,t=65,b=20), template="plotly_white")
-            st.plotly_chart(fig, width="stretch")
-            st.caption(f"Observations plotted: {len(plot_df):,}. Scatter plots are useful for relationships, clustering and potential nonlinear patterns.")
-    
-        elif chart_type == "Histogram / distribution":
-            var = st.selectbox("Variable", numeric_all or [y_col], key="hist_var")
-            bins = st.slider("Number of bins", 10, 80, 30, 5, key="hist_bins")
-            vals = df[var].dropna()
-            fig = px.histogram(vals, x=var, nbins=bins, marginal="box", title=f"Distribution of {var}")
-            fig.update_layout(height=520, margin=dict(l=20,r=20,t=65,b=20), template="plotly_white")
-            st.plotly_chart(fig, width="stretch")
-    
-        elif chart_type == "Box plot":
-            c1, c2 = st.columns(2)
-            y_box = c1.selectbox("Numeric variable", numeric_all or [y_col], key="box_y")
-            group_options = ["None"] + categorical_all
-            group_box = c2.selectbox("Group by", group_options, key="box_group")
-            cols = [y_box] + ([] if group_box == "None" else [group_box])
-            plot_df = df[cols].dropna()
-            fig = px.box(plot_df, y=y_box, x=None if group_box == "None" else group_box, points="outliers", title=f"Distribution of {y_box}")
-            fig.update_layout(height=520, margin=dict(l=20,r=20,t=65,b=20), template="plotly_white")
-            st.plotly_chart(fig, width="stretch")
-    
-        elif chart_type == "Bar chart":
-            c1, c2, c3 = st.columns(3)
-            cat = c1.selectbox("Category", categorical_all or df.columns.tolist(), key="bar_cat")
-            measure_options = numeric_all + ["Row count"]
-            measure = c2.selectbox("Measure", measure_options, key="bar_measure")
-            agg = c3.selectbox("Aggregation", ["Mean", "Sum", "Median", "Count"], index=0, key="bar_agg")
-            if measure == "Row count":
-                plot_df = df.groupby(cat, dropna=False).size().reset_index(name="Value")
-            else:
-                fn = {"Mean":"mean", "Sum":"sum", "Median":"median", "Count":"count"}[agg]
-                plot_df = df.groupby(cat, dropna=False)[measure].agg(fn).reset_index(name="Value")
-            plot_df[cat] = plot_df[cat].astype(str)
-            plot_df = plot_df.sort_values("Value", ascending=False).head(30)
-            fig = px.bar(plot_df, x=cat, y="Value", title=f"{agg} of {measure} by {cat}")
-            fig.update_layout(height=520, margin=dict(l=20,r=20,t=65,b=20), template="plotly_white", xaxis_tickangle=-35)
-            st.plotly_chart(fig, width="stretch")
-    
-        elif chart_type == "Pie chart":
-            c1, c2 = st.columns(2)
-            cat = c1.selectbox("Category", categorical_all or df.columns.tolist(), key="pie_cat")
-            value_mode = c2.selectbox("Slice value", ["Count", "Mean of selected numeric variable"], key="pie_mode")
-            if value_mode == "Count":
-                plot_df = df.groupby(cat, dropna=False).size().reset_index(name="Value")
-            else:
-                pv = st.selectbox("Numeric variable", numeric_all or [y_col], key="pie_num")
-                plot_df = df.groupby(cat, dropna=False)[pv].mean().reset_index(name="Value")
-            plot_df[cat] = plot_df[cat].astype(str)
-            plot_df = plot_df.sort_values("Value", ascending=False).head(8)
-            fig = px.pie(plot_df, names=cat, values="Value", hole=0.42, title=f"{value_mode} by {cat}")
-            fig.update_layout(height=520, margin=dict(l=20,r=20,t=65,b=20), template="plotly_white")
-            st.plotly_chart(fig, width="stretch")
-    
-        else:
-            c1, c2 = st.columns(2)
-            x_line = c1.selectbox("X / time variable", df.columns.tolist(), key="line_x")
-            y_line = c2.selectbox("Y variable", numeric_all or [y_col], key="line_y")
-            plot_df = df[[x_line, y_line]].dropna().copy()
-            if pd.api.types.is_numeric_dtype(plot_df[x_line]):
-                plot_df = plot_df.sort_values(x_line)
-            else:
-                plot_df[x_line] = plot_df[x_line].astype(str)
-            fig = px.line(plot_df, x=x_line, y=y_line, markers=True, title=f"{y_line} across {x_line}")
-            fig.update_layout(height=520, margin=dict(l=20,r=20,t=65,b=20), template="plotly_white")
-            st.plotly_chart(fig, width="stretch")
-    
-    with chart_tab2:
-        q1, q2, q3, q4 = st.columns(4)
-        q1.metric("Rows", f"{len(df):,}")
-        q2.metric("Columns", f"{len(df.columns):,}")
-        q3.metric("Numeric variables", f"{len(numeric_all):,}")
-        q4.metric("Missing cells", f"{int(df.isna().sum().sum()):,}")
-        if numeric_all:
-            insight = df[numeric_all].corr(numeric_only=True)
-            pairs = []
-            for i, a in enumerate(insight.columns):
-                for b in insight.columns[i+1:]:
-                    if pd.notna(insight.loc[a,b]):
-                        pairs.append((a,b,float(insight.loc[a,b])))
-            pairs = sorted(pairs, key=lambda z: abs(z[2]), reverse=True)
-            if pairs:
-                a,b,r = pairs[0]
-                st.markdown(f'<div class="chart-note"><b>Strongest observed numeric association:</b> {a} and {b}, Pearson correlation r = {r:.3f}. This is descriptive association, not proof of causation.</div>', unsafe_allow_html=True)
-    
-    with chart_tab3:
-        if len(numeric_all) >= 2:
-            corr = df[numeric_all].corr(numeric_only=True)
-            fig = px.imshow(corr, text_auto=".2f", aspect="auto", color_continuous_scale="RdBu_r", zmin=-1, zmax=1, title="Numeric correlation matrix")
-            fig.update_layout(height=max(520, 35*len(numeric_all)), margin=dict(l=20,r=20,t=65,b=20))
-            st.plotly_chart(fig, width="stretch")
-        else:
-            st.info("At least two numeric variables are needed for a correlation matrix.")
-    
-with st.container(border=True):
-    st.markdown('<div class="section-label">Step 4 · Predictive modelling</div>', unsafe_allow_html=True)
-    
-    model_options = [
-        "Linear Regression", "Polynomial Regression", "Ridge Regression",
-        "Lasso Regression", "Elastic Net", "Random Forest",
-        "Gradient Boosting", "Linear + AI Residual Hybrid"
-    ]
-    selected_models = st.multiselect(
-        "Models to run",
-        model_options,
-        default=model_options,
-        help="Choose which statistical, AI and hybrid models to include in the analysis."
-    )
-    
-    if model_choice == "Choose manually":
-        manual_model = st.selectbox("Model to report as final selected model", selected_models or model_options)
-    else:
-        manual_model = None
-    
-    with st.expander("What the models mean"):
+        1. Fit the statistical base model on training data.
+        2. Generate **out-of-fold predictions** for the training observations.
+        3. Calculate residuals from those out-of-fold predictions.
+        4. Train the AI residual learner on those residuals.
+        5. Refit the statistical base model on the complete training portion.
+        6. Predict the test observations with the base model.
+        7. Predict the residual correction with the AI learner.
+        8. Add the two components.
+        """)
+        st.latex(r"e_i^{OOF}=Y_i-\hat g^{(-k(i))}(X_i)")
+        st.latex(r"\hat Y_H=\hat g(X)+\hat h(X)")
+        st.markdown("**Key research idea:** the hybrid is useful only if the residuals contain systematic, generalisable information rather than mainly random noise.")
+        st.info("Residual hybridisation is an established modelling strategy. The research question is when and under what conditions it adds incremental out-of-sample information.")
+
+    with theory_tabs[4]:
+        st.markdown("### Performance measures")
+        st.latex(r"RMSE=\sqrt{\frac{1}{n}\sum_i(Y_i-\hat Y_i)^2}")
+        st.latex(r"MAE=\frac{1}{n}\sum_i|Y_i-\hat Y_i|")
+        st.latex(r"R^2=1-\frac{SSE}{SST}")
+        st.write("RMSE and MAE are prediction-error measures; lower values indicate smaller errors. R² describes performance relative to a mean-baseline reference; higher values are generally better on the same evaluation sample.")
+
+        st.markdown("### Validation logic")
         st.markdown("""
-    - **Linear Regression:** interpretable parametric baseline.
-    - **Polynomial Regression:** adds nonlinear polynomial terms.
-    - **Ridge / Lasso / Elastic Net:** regularized linear models that can reduce overfitting and handle correlated predictors.
-    - **Random Forest:** tree ensemble that can capture nonlinearities and interactions.
-    - **Gradient Boosting:** sequential tree ensemble that learns residual structure.
-    - **Linear + AI Residual Hybrid:** linear statistical structure plus an AI learner trained on out-of-fold residuals.
-    """)
-    
-    if not selected_models:
-        st.warning("Select at least one model.")
-        st.stop()
-    
-    run_models = st.button(
-        "🚀 Run Analysis & Generate Statistical Report",
-        type="primary",
-        use_container_width=True
-    )
-    
-    if not run_models:
-        st.stop()
-    
-    X_train, X_test, y_train, y_test = train_test_split(
-        X, y, test_size=float(test_size), random_state=int(random_state)
-    )
-    
-    models = {
-        "Linear Regression": make_pipeline_model(LinearRegression(), X),
-        "Polynomial Regression": Pipeline([
-            ("preprocess", make_preprocessor(X)),
-            ("poly", PolynomialFeatures(degree=int(poly_degree), include_bias=False)),
-            ("scale", StandardScaler()),
-            ("model", Ridge(alpha=1.0))
-        ]),
-        "Ridge Regression": make_pipeline_model(
-            Pipeline([("scale", StandardScaler()), ("model", Ridge(alpha=1.0))]), X
-        ),
-        "Lasso Regression": make_pipeline_model(
-            Pipeline([("scale", StandardScaler()), ("model", Lasso(alpha=0.01, max_iter=20000))]), X
-        ),
-        "Elastic Net": make_pipeline_model(
-            Pipeline([("scale", StandardScaler()), ("model", ElasticNet(alpha=0.01, l1_ratio=0.5, max_iter=20000))]), X
-        ),
-        "Random Forest": make_pipeline_model(
-            RandomForestRegressor(
-                n_estimators=int(rf_trees),
-                random_state=int(random_state),
-                n_jobs=-1
-            ), X
-        ),
-        "Gradient Boosting": make_pipeline_model(
-            GradientBoostingRegressor(
-                n_estimators=int(gb_trees),
-                learning_rate=0.05,
-                max_depth=3,
-                random_state=int(random_state)
-            ), X
-        ),
-    }
-    
-    predictions = {}
-    train_predictions = {}
-    rows = []
-    cv_rows = []
-    
-    progress = st.progress(0, text="Running models...")
-    selected_standard = [m for m in selected_models if m != "Linear + AI Residual Hybrid"]
-    total_steps = max(1, len(selected_standard) * 2 + (2 if "Linear + AI Residual Hybrid" in selected_models else 0))
-    step = 0
-    
-    for name in selected_standard:
-        estimator = models[name]
-        fitted = clone(estimator)
-        fitted.fit(X_train, y_train)
-        pred_test = fitted.predict(X_test)
-        pred_train = fitted.predict(X_train)
-        predictions[name] = pred_test
-        train_predictions[name] = pred_train
-        m_test = metric_values(y_test, pred_test)
-        m_train = metric_values(y_train, pred_train)
-        rows.append({
-            "Model": name,
-            "Type": "AI" if name in ["Random Forest", "Gradient Boosting"] else "Statistical",
-            "Train RMSE": m_train["RMSE"], "Train MAE": m_train["MAE"], "Train R²": m_train["R²"],
-            "RMSE": m_test["RMSE"], "MAE": m_test["MAE"], "R²": m_test["R²"]
-        })
-        step += 1
-        progress.progress(step / total_steps, text=f"Testing {name}")
-    
-        # Cross-validation on the training portion; final test set remains untouched.
-        cv_rmse, cv_mae, cv_r2 = [], [], []
-        kf = KFold(n_splits=int(n_splits), shuffle=True, random_state=int(random_state))
-        for tr_idx, va_idx in kf.split(X_train):
-            fold_model = clone(estimator)
-            fold_model.fit(X_train.iloc[tr_idx], y_train.iloc[tr_idx])
-            fold_pred = fold_model.predict(X_train.iloc[va_idx])
-            fold_metrics = metric_values(y_train.iloc[va_idx], fold_pred)
-            cv_rmse.append(fold_metrics["RMSE"])
-            cv_mae.append(fold_metrics["MAE"])
-            cv_r2.append(fold_metrics["R²"])
-        cv_rows.append({
-            "Model": name,
-            "CV RMSE": float(np.mean(cv_rmse)),
-            "CV RMSE SD": float(np.std(cv_rmse, ddof=1)) if len(cv_rmse) > 1 else 0.0,
-            "CV MAE": float(np.mean(cv_mae)),
-            "CV MAE SD": float(np.std(cv_mae, ddof=1)) if len(cv_mae) > 1 else 0.0,
-            "CV R²": float(np.mean(cv_r2)),
-            "CV R² SD": float(np.std(cv_r2, ddof=1)) if len(cv_r2) > 1 else 0.0,
-        })
-        step += 1
-        progress.progress(step / total_steps, text=f"Cross-validating {name}")
-    
-    if "Linear + AI Residual Hybrid" in selected_models:
-        hybrid_base = make_pipeline_model(LinearRegression(), X)
-        hybrid_residual = make_pipeline_model(
-            GradientBoostingRegressor(
-                n_estimators=int(gb_trees), learning_rate=0.05, max_depth=3,
-                random_state=int(random_state)
-            ), X
-        )
-        hybrid_base_final, hybrid_residual_final, hybrid_pred, residual_test_pred, oof_residuals = fit_hybrid_oof(
-            hybrid_base, hybrid_residual, X_train, y_train, X_test,
-            n_splits=int(n_splits), random_state=int(random_state)
-        )
-        # In-sample training prediction from the fitted final components.
-        base_train_pred = hybrid_base_final.predict(X_train)
-        residual_train_pred = hybrid_residual_final.predict(X_train)
-        hybrid_train_pred = base_train_pred + residual_train_pred
-        predictions["Linear + AI Residual Hybrid"] = hybrid_pred
-        train_predictions["Linear + AI Residual Hybrid"] = hybrid_train_pred
-        m_test = metric_values(y_test, hybrid_pred)
-        m_train = metric_values(y_train, hybrid_train_pred)
-        rows.append({
-            "Model": "Linear + AI Residual Hybrid", "Type": "Hybrid",
-            "Train RMSE": m_train["RMSE"], "Train MAE": m_train["MAE"], "Train R²": m_train["R²"],
-            "RMSE": m_test["RMSE"], "MAE": m_test["MAE"], "R²": m_test["R²"]
-        })
-        # The hybrid is evaluated through repeated OOF base residual construction on the training data.
-        # This is reported separately and is not used as a substitute for the untouched final test set.
-        cv_rows.append({
-            "Model": "Linear + AI Residual Hybrid",
-            "CV RMSE": float(np.sqrt(np.mean(oof_residuals ** 2))),
-            "CV RMSE SD": np.nan,
-            "CV MAE": float(np.mean(np.abs(oof_residuals))),
-            "CV MAE SD": np.nan,
-            "CV R²": float(1 - np.sum(oof_residuals ** 2) / np.sum((y_train.to_numpy() - y_train.mean()) ** 2)),
-            "CV R² SD": np.nan,
-        })
-        step += 2
-        progress.progress(min(1.0, step / total_steps), text="Completed hybrid residual analysis")
+        **Training data:** fit models and perform internal tuning/cross-validation.
+
+        **Cross-validation:** repeatedly divides the training data into fitting and validation folds to estimate expected performance.
+
+        **Untouched test set:** used only for final out-of-sample confirmation.
+
+        **Inference layer:** full-data OLS diagnostics answer a different question from hold-out prediction. Coefficients, standard errors, confidence intervals and hypothesis tests should not be inferred automatically for AI components.
+        """)
+
+with tabs[3]:
+    st.subheader('📈 Predictive results')
+    a,b,c,d=st.columns(4); a.metric('Selected model',selected_model); b.metric('Test RMSE',f"{selrow.RMSE:.4f}"); c.metric('Test MAE',f"{selrow.MAE:.4f}"); d.metric('Test R²',f"{selrow['R²']:.4f}")
+    st.caption(f'Model selection criterion: {criterion}. Training observations: {len(ytr):,}; untouched test observations: {len(yte):,}.')
+    st.dataframe(comparison[['Model','Type','Train RMSE','Train MAE','Train R²','CV RMSE','CV RMSE SD','CV MAE','CV MAE SD','CV R²','CV R² SD','RMSE','MAE','R²','Generalization Gap R²','Average Test Rank']].style.format({c:'{:.4f}' for c in comparison.columns if c not in ['Model','Type'] and 'Rank' not in c}),use_container_width=True,hide_index=True)
+    fig=px.bar(comparison.sort_values('RMSE'),x='Model',y='RMSE',title='Test RMSE by model',text_auto='.3f'); fig.update_layout(template='plotly_white',height=500,xaxis_tickangle=-35); st.plotly_chart(fig,use_container_width=True)
+    st.markdown('### Actual vs predicted')
+    long=pd.DataFrame({'Actual':np.tile(yte.to_numpy(),len(preds)),'Predicted':np.concatenate(list(preds.values())),'Model':np.repeat(list(preds.keys()),len(yte))})
+    fig=px.scatter(long,x='Actual',y='Predicted',facet_col='Model',facet_col_wrap=2,trendline=None,title='Hold-out test predictions'); mn=min(long.Actual.min(),long.Predicted.min()); mx=max(long.Actual.max(),long.Predicted.max()); fig.add_shape(type='line',x0=mn,x1=mx,y0=mn,y1=mx,line_dash='dash',row='all',col='all'); fig.update_layout(template='plotly_white',height=850); st.plotly_chart(fig,use_container_width=True)
+
+with tabs[4]:
+    st.subheader('🔬 Hybrid model analysis')
+    lin=comparison[comparison.Model=='Linear Regression'].iloc[0]; hyb=comparison[comparison.Model=='Linear + AI Residual Hybrid'].iloc[0]
+    rmse_imp=lin.RMSE-hyb.RMSE; mae_imp=lin.MAE-hyb.MAE; pct=100*rmse_imp/lin.RMSE
+    a,b,c=st.columns(3); a.metric('Linear test RMSE',f'{lin.RMSE:.4f}'); b.metric('Hybrid test RMSE',f'{hyb.RMSE:.4f}'); c.metric('Hybrid RMSE change',f'{pct:+.2f}%')
+    st.write(f'RMSE difference (Linear − Hybrid): **{rmse_imp:.6f}**. MAE difference: **{mae_imp:.6f}**.')
+    st.info('Positive improvement means the hybrid had lower error than the linear model on this particular hold-out split. It does not establish universal superiority.')
+    resid=oof
+    r1,r2,r3=st.columns(3); r1.metric('OOF residual SD',f'{np.std(resid):.4f}'); r2.metric('OOF residual mean',f'{np.mean(resid):.4f}'); r3.metric('OOF residual MAE',f'{np.mean(np.abs(resid)):.4f}')
+    fig=px.histogram(x=resid,nbins=30,title='Out-of-fold statistical residuals'); fig.update_layout(template='plotly_white'); st.plotly_chart(fig,use_container_width=True)
+    st.markdown('### What this tells you')
+    st.write('If residuals retain systematic structure that the AI learner can generalise, the hybrid can add predictive information. If residuals are mostly random noise, the AI component has little genuine signal to learn and may overfit.')
+
+# ----------------------------- diagnostics -----------------------------
+Xdiag=pd.DataFrame(index=X.index)
+for c in x_cols:
+    if pd.api.types.is_numeric_dtype(X[c]): Xdiag[c]=pd.to_numeric(X[c],errors='coerce')
+    else: Xdiag=pd.concat([Xdiag,pd.get_dummies(X[c].astype('string').fillna('Missing'),prefix=c,drop_first=True,dtype=float)],axis=1)
+Xdiag=Xdiag.replace([np.inf,-np.inf],np.nan).fillna(Xdiag.median(numeric_only=True)); Xdiag=Xdiag.loc[:,Xdiag.nunique()>1]
+try:
+    osm=sm.OLS(y,sm.add_constant(Xdiag.astype(float),has_constant='add')).fit(); conf=osm.conf_int(); coef=pd.DataFrame({'Variable':osm.params.index,'Coefficient':osm.params.values,'Std. Error':osm.bse.values,'t':osm.tvalues.values,'p-value':osm.pvalues.values,'95% CI Lower':conf[0].values,'95% CI Upper':conf[1].values})
+    sst=float(np.sum((y-y.mean())**2)); ssr=float(np.sum(osm.resid**2)); verified=1-ssr/sst
+    anova=pd.DataFrame({'Source':['Regression','Residual','Total'],'Sum of Squares':[sst-ssr,ssr,sst],'df':[osm.df_model,osm.df_resid,osm.df_model+osm.df_resid]})
+    bp=het_breuschpagan(osm.resid,osm.model.exog); bp_p=bp[1]
+except Exception as e:
+    osm=None; coef=pd.DataFrame(); anova=pd.DataFrame(); verified=np.nan; bp_p=np.nan
+
+with tabs[5]:
+    st.subheader('🩺 Diagnostics & statistical inference')
+    if osm is None: st.warning('OLS diagnostics could not be calculated for this specification.');
     else:
-        residual_test_pred = np.zeros(len(X_test))
-    
-    progress.progress(1.0, text="Analysis complete")
-    progress.empty()
-    
-    comparison = pd.DataFrame(rows)
-    cv_comparison = pd.DataFrame(cv_rows)
-    comparison = comparison.merge(cv_comparison, on="Model", how="left")
-    comparison["Test RMSE Rank"] = comparison["RMSE"].rank(method="min", ascending=True).astype(int)
-    comparison["Test MAE Rank"] = comparison["MAE"].rank(method="min", ascending=True).astype(int)
-    comparison["Test R² Rank"] = comparison["R²"].rank(method="min", ascending=False).astype(int)
-    comparison["CV RMSE Rank"] = comparison["CV RMSE"].rank(method="min", ascending=True).astype(int)
-    comparison["CV MAE Rank"] = comparison["CV MAE"].rank(method="min", ascending=True).astype(int)
-    comparison["CV R² Rank"] = comparison["CV R²"].rank(method="min", ascending=False).astype(int)
-    comparison["Average Test Rank"] = comparison[["Test RMSE Rank", "Test MAE Rank", "Test R² Rank"]].mean(axis=1)
-    comparison["Generalization Gap R²"] = comparison["Train R²"] - comparison["R²"]
-    comparison = comparison.sort_values("RMSE").reset_index(drop=True)
-    
-    # Determine the selected model using the user's criterion.
-    if model_choice == "Choose manually":
-        selected_final_model = manual_model
-    else:
-        if selection_criterion == "Cross-validation RMSE":
-            selected_final_model = comparison.loc[comparison["CV RMSE"].idxmin(), "Model"]
-        elif selection_criterion == "Cross-validation MAE":
-            selected_final_model = comparison.loc[comparison["CV MAE"].idxmin(), "Model"]
-        elif selection_criterion == "Cross-validation R²":
-            selected_final_model = comparison.loc[comparison["CV R²"].idxmax(), "Model"]
-        elif selection_criterion == "Test RMSE":
-            selected_final_model = comparison.loc[comparison["RMSE"].idxmin(), "Model"]
-        elif selection_criterion == "Test MAE":
-            selected_final_model = comparison.loc[comparison["MAE"].idxmin(), "Model"]
+        a,b,c,d,e=st.columns(5); a.metric('Full-data OLS R²',f'{osm.rsquared:.4f}'); b.metric('Adjusted R²',f'{osm.rsquared_adj:.4f}'); c.metric('F-statistic',f'{osm.fvalue:.3f}'); d.metric('Model p-value',f'{osm.f_pvalue:.3g}'); e.metric('OLS observations',f'{int(osm.nobs):,}')
+        st.markdown('### OLS result verification')
+        v1,v2,v3=st.columns(3); v1.metric('Statsmodels R²',f'{osm.rsquared:.6f}'); v2.metric('Reproduced R²',f'{verified:.6f}'); v3.metric('Absolute difference',f'{abs(osm.rsquared-verified):.2e}')
+        st.success('✓ R² verification passed: the independently reproduced 1 − SSR/SST value agrees with the OLS result to numerical precision.') if abs(osm.rsquared-verified)<1e-10 else st.warning('R² verification requires review.')
+        with st.expander('OLS coefficients'): st.dataframe(coef,use_container_width=True,hide_index=True)
+        with st.expander('ANOVA'): st.dataframe(anova,use_container_width=True,hide_index=True)
+        st.markdown('### Multicollinearity')
+        if Xdiag.shape[1]>=2:
+            vr=[]
+            for i,c in enumerate(Xdiag.columns):
+                try:v=float(variance_inflation_factor(Xdiag.astype(float).values,i))
+                except:v=np.inf
+                vr.append({'Variable':c,'VIF':v,'Interpretation':'Very high' if v>=10 else ('High / potentially problematic' if v>=5 else 'No strong VIF indication')})
+            vif=pd.DataFrame(vr).sort_values('VIF',ascending=False); st.dataframe(vif,use_container_width=True,hide_index=True); st.caption('VIF mainly concerns coefficient stability and standard errors. It does not by itself determine predictive performance.')
+        else: vif=pd.DataFrame(); st.info('VIF requires at least two usable predictor columns.')
+        st.markdown('### Heteroscedasticity check')
+        st.metric('Breusch–Pagan p-value',f'{bp_p:.4g}' if np.isfinite(bp_p) else 'N/A'); st.caption('A small p-value can indicate non-constant error variance. This test is diagnostic, not a complete model-validity proof.')
+        with st.expander('Why OLS R² and predictive R² do not need to match',expanded=True):
+            st.write(f'OLS inference uses all {len(y):,} usable observations. Predictive evaluation fits models on {len(ytr):,} training observations and evaluates them on {len(yte):,} untouched test observations. They answer different questions, so different R² values are expected.')
+
+with tabs[6]:
+    st.subheader('💡 Results interpretation — what the numbers mean')
+    st.caption('Interpretation is generated from the current dataset and validation results. It is conditional on the chosen variables, preprocessing, model settings and validation design.')
+
+    int_tabs = st.tabs(['🎯 Predictive results','📐 Statistical inference','🔗 Hybrid results','⚠️ Diagnostics & limitations','📝 Research conclusion'])
+
+    best_rmse=comparison.loc[comparison.RMSE.idxmin()]
+    best_cv=comparison.loc[comparison['CV RMSE'].idxmin()]
+    gap=float(selrow['Generalization Gap R²'])
+
+    with int_tabs[0]:
+        st.markdown("### Test-set performance")
+        st.write(f"On the current untouched test set, **{best_rmse.Model}** has the lowest RMSE (**{best_rmse.RMSE:.4f}**) among the models included in this run.")
+        st.write(f"The model with the lowest mean cross-validation RMSE is **{best_cv.Model}** (**{best_cv['CV RMSE']:.4f}**).")
+        st.info("These statements describe this dataset and this validation design. They should not be interpreted as a universal ranking of algorithms.")
+        a,b,c=st.columns(3)
+        a.metric("Selected model",selected_model)
+        b.metric("Test RMSE",f"{selrow.RMSE:.4f}")
+        c.metric("Test R²",f"{selrow['R²']:.4f}")
+        st.markdown("**How to read the metrics:**")
+        st.markdown("""
+        - **RMSE:** typical error on the outcome scale, with larger errors receiving more weight.
+        - **MAE:** average absolute prediction error and generally less sensitive to extreme errors than RMSE.
+        - **R²:** relative explanatory/predictive performance on the evaluation sample.
+        - **CV SD:** variation in performance across validation folds; larger values indicate less stable fold-to-fold performance.
+        """)
+
+    with int_tabs[1]:
+        st.markdown("### Full-data OLS interpretation")
+        if osm is not None:
+            sig=coef[(coef['Variable']!='const') & (coef['p-value']<.05)]
+            st.write(f"The full-data OLS model has **R² = {osm.rsquared:.4f}** and adjusted R² = **{osm.rsquared_adj:.4f}**.")
+            st.write(f"In this fitted specification, **{len(sig)}** displayed non-intercept terms have p < 0.05.")
+            st.dataframe(coef,use_container_width=True,hide_index=True)
+            st.info("A statistically significant coefficient is evidence against a zero coefficient under the fitted model and its assumptions. It is not, by itself, proof of causality, practical importance, or superior prediction.")
+            st.markdown("### Why this can differ from test R²")
+            st.write(f"OLS inference uses all {len(y):,} usable observations, while predictive evaluation uses {len(ytr):,} training observations and {len(yte):,} untouched test observations. Different R² values are therefore expected.")
         else:
-            selected_final_model = comparison.loc[comparison["R²"].idxmax(), "Model"]
-    
-    selected_row = comparison.loc[comparison["Model"] == selected_final_model].iloc[0]
-    
-with st.container(border=True):
-    st.markdown('<div class="section-label">Step 5 · Model selection & performance</div>', unsafe_allow_html=True)
-    st.subheader("Model selection and complete performance report")
-    sel_col1, sel_col2, sel_col3 = st.columns(3)
-    sel_col1.metric("Selected model", selected_final_model)
-    sel_col2.metric("Selection criterion", selection_criterion)
-    sel_col3.metric("Test R²", f"{selected_row['R²']:.4f}")
-    
-    st.info(
-        "**How to use this selection:** for a research analysis, the preferred default is a cross-validation criterion. "
-        "The final hold-out test set should then be used as an independent confirmation of performance. "
-        "If you choose a test-set criterion, interpret it as a descriptive selection on this particular split, not as an unbiased future-performance estimate."
-    )
-    
-    report_cols = [
-        "Model", "Type", "Train RMSE", "Train MAE", "Train R²",
-        "CV RMSE", "CV RMSE SD", "CV MAE", "CV MAE SD", "CV R²", "CV R² SD",
-        "RMSE", "MAE", "R²", "Generalization Gap R²",
-        "Test RMSE Rank", "Test MAE Rank", "Test R² Rank", "Average Test Rank"
-    ]
-    st.dataframe(
-        comparison[report_cols].style.format({
-            c: "{:.6f}" for c in report_cols if c not in ["Model", "Type"] and "Rank" not in c
-        }).format({
-            c: "{:.2f}" for c in report_cols if "Rank" in c
-        }),
-        use_container_width=True, hide_index=True
-    )
-    st.caption(
-        "Train metrics describe fit to the training data. CV metrics summarize training-set cross-validation. "
-        "Test metrics come from the untouched hold-out test set. Lower RMSE/MAE is better; higher R² is better. "
-        "The report is descriptive and should be interpreted with the validation design and model assumptions."
-    )
-    
-    with st.expander("📘 Statistical interpretation of the performance report", expanded=True):
-        st.markdown(f"""
-    **Selected model:** `{selected_final_model}` using **{selection_criterion}**.
-    
-    - **RMSE:** measures the typical prediction error on the outcome scale, with larger errors receiving greater weight.
-    - **MAE:** measures the average absolute prediction error and is less sensitive to very large errors than RMSE.
-    - **R²:** measures the proportion of outcome variation accounted for relative to the test-set mean baseline; it can be negative for a poor model.
-    - **Cross-validation:** estimates expected performance across multiple validation folds within the training data.
-    - **Generalization gap:** `Train R² − Test R²`; a large positive value can indicate overfitting, although it is not by itself a formal overfitting test.
-    - **Model selection:** the app lets you choose the criterion rather than silently declaring one algorithm universally superior.
-    """)
-    
-with st.container(border=True):
-    st.markdown('<div class="section-label">Step 6 · Hybrid incremental value</div>', unsafe_allow_html=True)
-    st.subheader("Hybrid incremental value")
-    if "Linear Regression" in comparison["Model"].values and "Linear + AI Residual Hybrid" in comparison["Model"].values:
-        linear_row = comparison.loc[comparison["Model"] == "Linear Regression"].iloc[0]
-        hybrid_row = comparison.loc[comparison["Model"] == "Linear + AI Residual Hybrid"].iloc[0]
-        rmse_change = linear_row["RMSE"] - hybrid_row["RMSE"]
-        mae_change = linear_row["MAE"] - hybrid_row["MAE"]
-        rmse_pct = 100 * rmse_change / linear_row["RMSE"] if linear_row["RMSE"] else np.nan
-    
-        c1, c2, c3 = st.columns(3)
-        c1.metric("Linear RMSE", f"{linear_row['RMSE']:.6f}")
-        c2.metric("Hybrid RMSE", f"{hybrid_row['RMSE']:.6f}")
-        c3.metric("Hybrid RMSE improvement", f"{rmse_pct:+.2f}%" if np.isfinite(rmse_pct) else "N/A")
-    
+            st.warning("OLS inference was not available for this specification.")
+
+    with int_tabs[2]:
+        st.markdown("### Does the AI residual component add information?")
+        lin=comparison[comparison.Model=='Linear Regression'].iloc[0]
+        hyb=comparison[comparison.Model=='Linear + AI Residual Hybrid'].iloc[0]
+        rmse_imp=float(lin.RMSE-hyb.RMSE)
+        mae_imp=float(lin.MAE-hyb.MAE)
+        pct=float(100*rmse_imp/lin.RMSE) if lin.RMSE else np.nan
+        a,b,c=st.columns(3)
+        a.metric("Linear RMSE",f"{lin.RMSE:.4f}")
+        b.metric("Hybrid RMSE",f"{hyb.RMSE:.4f}")
+        c.metric("RMSE change",f"{pct:+.2f}%")
+        if rmse_imp>0:
+            st.success(f"On this hold-out split, the hybrid has lower RMSE than linear regression by {rmse_imp:.4f}. This is evidence of incremental value for this evaluation, not a universal conclusion.")
+        elif rmse_imp<0:
+            st.warning(f"On this hold-out split, the hybrid has higher RMSE than linear regression by {-rmse_imp:.4f}. The residual learner did not improve this particular evaluation.")
+        else:
+            st.info("The hybrid and linear model have essentially the same test RMSE on this split.")
+        st.write(f"The OOF residual mean is **{np.mean(oof):.4f}** and OOF residual SD is **{np.std(oof):.4f}**.")
+        st.markdown("**Research interpretation:** the central question is whether residual structure is systematic and generalisable. A large residual variance alone does not prove that an AI learner can predict it.")
+
+    with int_tabs[3]:
+        st.markdown("### Generalisation")
+        st.write(f"The selected model has a train-to-test R² gap of **{gap:.4f}**.")
+        if gap>0.15:
+            st.warning("The train-to-test gap is relatively large for this run and warrants investigation for overfitting, data heterogeneity, or validation instability.")
+        elif gap>0.05:
+            st.info("There is a noticeable train-to-test gap. Compare CV variability and diagnostics before drawing conclusions.")
+        else:
+            st.success("The train-to-test R² gap is relatively small in this run. This is encouraging, but it is not a formal proof of generalisation.")
+        if 'vif' in locals() and not vif.empty:
+            high=vif[vif.VIF>=5]['Variable'].tolist()
+            st.markdown("### Multicollinearity")
+            st.write("Variables with VIF ≥ 5: **"+(", ".join(high) if high else "none detected by this threshold.")+"**.")
+            st.caption("Multicollinearity mainly affects coefficient stability and standard errors. It does not automatically mean that predictive performance is poor.")
+        if np.isfinite(bp_p):
+            st.markdown("### Breusch–Pagan diagnostic")
+            st.write(f"Breusch–Pagan p-value: **{bp_p:.4g}**.")
+            st.caption("A small p-value can indicate non-constant error variance. This is one diagnostic and should be considered with residual plots and the modelling context.")
+
+    with int_tabs[4]:
+        st.markdown("### Research-level conclusion")
         st.write(
-            f"**RMSE improvement:** {rmse_change:.6f}  |  "
-            f"**MAE improvement:** {mae_change:.6f}"
+            f"The current analysis compares interpretable statistical models, regularised statistical models, flexible AI models and a residual hybrid under the selected validation design. "
+            f"The selected model by **{criterion}** is **{selected_model}**, but the evidence remains conditional on this dataset and analysis design."
         )
-        st.caption(
-            "A positive improvement means the hybrid had lower error than linear regression on this test split. "
-            "This does not establish that the hybrid will outperform other models or future datasets."
-        )
+        st.markdown("""
+        **For a research report, state separately:**
+        1. What the predictive metrics show.
+        2. What the OLS coefficients and inferential diagnostics show.
+        3. Whether the hybrid changes out-of-sample performance.
+        4. Whether diagnostics reveal possible model weaknesses.
+        5. What limitations remain.
+
+        **Do not conclude that an algorithm is universally best from one dataset or one train/test split.**
+        """)
+        st.info("The platform is designed to support transparent comparison rather than a blind 'best model' decision.")
+
+with tabs[7]:
+    st.subheader('🎨 Chart Studio')
+    st.caption('Choose what you want to visualise. This section is independent from the model-selection criterion.')
+    chart=st.selectbox('Chart preference',['Scatter plot','Histogram','Box plot','Bar chart','Line / trend','Correlation heatmap','Prediction error distribution','CV RMSE with uncertainty'])
+    numeric=[c for c in df.columns if pd.api.types.is_numeric_dtype(df[c])]; categorical=[c for c in df.columns if c not in numeric]
+    if chart=='Scatter plot':
+        c1,c2,c3=st.columns(3); xx=c1.selectbox('X',numeric,index=0); yy=c2.selectbox('Y',numeric,index=min(1,len(numeric)-1)); cc=c3.selectbox('Colour',['None']+categorical)
+        p=df[[xx,yy]+([] if cc=='None' else [cc])].dropna(); fig=px.scatter(p,x=xx,y=yy,color=None if cc=='None' else cc,trendline='ols' if len(p)>=10 else None,title=f'{yy} vs {xx}')
+    elif chart=='Histogram':
+        v=st.selectbox('Variable',numeric); fig=px.histogram(df,x=v,nbins=30,marginal='box',title=f'Distribution of {v}')
+    elif chart=='Box plot':
+        c1,c2=st.columns(2); v=c1.selectbox('Numeric variable',numeric); g=c2.selectbox('Group',['None']+categorical); fig=px.box(df,y=v,x=None if g=='None' else g,points='outliers',title=f'Box plot of {v}')
+    elif chart=='Bar chart':
+        c1,c2=st.columns(2); g=c1.selectbox('Category',categorical or df.columns.tolist()); v=c2.selectbox('Numeric measure',numeric); p=df.groupby(g,dropna=False)[v].mean().reset_index(); fig=px.bar(p,x=g,y=v,title=f'Mean {v} by {g}')
+    elif chart=='Line / trend':
+        v=st.selectbox('Numeric variable',numeric); fig=px.line(df.reset_index(),x='index',y=v,title=f'{v} across row order')
+    elif chart=='Correlation heatmap':
+        corr=df[numeric].corr(numeric_only=True); fig=px.imshow(corr,text_auto='.2f',aspect='auto',title='Pearson correlation matrix')
+    elif chart=='Prediction error distribution':
+        err=pd.DataFrame({m:yte.to_numpy()-p for m,p in preds.items()}); lm=err.melt(var_name='Model',value_name='Error'); fig=px.histogram(lm,x='Error',color='Model',barmode='overlay',nbins=35,title='Test prediction error distributions')
     else:
-        st.info("Hybrid incremental-value analysis requires both Linear Regression and Linear + AI Residual Hybrid to be selected.")
-    
-with st.container(border=True):
-    st.markdown('<div class="section-label">Step 7 · Model visual diagnostics</div>', unsafe_allow_html=True)
-    st.subheader("Actual vs predicted")
-    fig, ax = plt.subplots(figsize=(10, 6))
-    for name, pred in predictions.items():
-        ax.scatter(y_test, pred, alpha=0.55, s=30, label=name)
-    mn = min(float(y_test.min()), min(float(np.min(p)) for p in predictions.values()))
-    mx = max(float(y_test.max()), max(float(np.max(p)) for p in predictions.values()))
-    ax.plot([mn, mx], [mn, mx], "--", linewidth=2, label="Perfect prediction")
-    ax.set_xlabel("Actual")
-    ax.set_ylabel("Predicted")
-    ax.set_title("Actual vs Predicted — Test Set")
-    ax.grid(alpha=0.25)
-    ax.legend(bbox_to_anchor=(1.02, 1), loc="upper left")
-    st.pyplot(fig)
-    plt.close(fig)
-    
-    st.subheader("Test RMSE comparison")
-    fig, ax = plt.subplots(figsize=(10, 6))
-    plot_df = comparison.sort_values("RMSE")
-    ax.bar(plot_df["Model"], plot_df["RMSE"])
-    ax.set_ylabel("Test RMSE")
-    ax.set_title("Test RMSE by Model")
-    ax.tick_params(axis="x", rotation=45)
-    ax.grid(axis="y", alpha=0.25)
-    st.pyplot(fig)
-    plt.close(fig)
-    
-    st.subheader("Cross-validation performance")
-    cv_plot = comparison.sort_values("CV RMSE")
-    fig, ax = plt.subplots(figsize=(10, 6))
-    ax.bar(cv_plot["Model"], cv_plot["CV RMSE"], yerr=cv_plot["CV RMSE SD"].fillna(0), capsize=4)
-    ax.set_ylabel("Mean CV RMSE")
-    ax.set_title("Cross-validation RMSE on the Training Set")
-    ax.tick_params(axis="x", rotation=45)
-    ax.grid(axis="y", alpha=0.25)
-    st.pyplot(fig)
-    plt.close(fig)
-    
-    st.subheader("Test-set prediction table")
-    prediction_table = X_test.reset_index(drop=True).copy()
-    prediction_table.insert(0, "Actual", y_test.reset_index(drop=True))
-    for name, pred in predictions.items():
-        prediction_table[f"Predicted — {name}"] = pred
-    prediction_table["Hybrid Residual Correction"] = residual_test_pred
-    st.dataframe(prediction_table, use_container_width=True)
-    
-    # OLS diagnostics are provided only when all selected predictors can be represented numerically.
-with st.container(border=True):
-    st.markdown('<div class="section-label">Step 8 · Statistical inference & diagnostics</div>', unsafe_allow_html=True)
-    st.subheader("Statistical diagnostics for the linear model")
-    
-    diagnostics_rows = []
-    coef_df = pd.DataFrame()
-    vif_df = pd.DataFrame()
-    
-    X_diag = pd.DataFrame(index=X_train.index)
-    for col in x_cols:
-        if pd.api.types.is_numeric_dtype(X_train[col]):
-            X_diag[col] = pd.to_numeric(X_train[col], errors="coerce")
-        else:
-            # For diagnostics, use one-hot encoding and median/mode imputation.
-            dummies = pd.get_dummies(
-                X_train[col].astype("string").fillna("Missing"),
-                prefix=col,
-                drop_first=True,
-                dtype=float
-            )
-            X_diag = pd.concat([X_diag, dummies], axis=1)
-    
-    X_diag = X_diag.replace([np.inf, -np.inf], np.nan)
-    X_diag = X_diag.fillna(X_diag.median(numeric_only=True))
-    X_diag = X_diag.loc[:, X_diag.nunique(dropna=True) > 1]
-    
-    try:
-        X_sm = sm.add_constant(X_diag.astype(float), has_constant="add")
-        ols_model = sm.OLS(y_train.reset_index(drop=True), X_sm.reset_index(drop=True)).fit()
-    
-        m1, m2, m3, m4, m5 = st.columns(5)
-        m1.metric("Training observations", f"{int(ols_model.nobs):,}")
-        m2.metric("Training R²", f"{ols_model.rsquared:.4f}")
-        m3.metric("Adjusted R²", f"{ols_model.rsquared_adj:.4f}")
-        m4.metric("F-statistic", f"{ols_model.fvalue:.4f}")
-        m5.metric("Model p-value", f"{ols_model.f_pvalue:.6g}")
-    
-        conf = ols_model.conf_int(alpha=0.05)
-        coef_df = pd.DataFrame({
-            "Variable": ols_model.params.index,
-            "Coefficient": ols_model.params.values,
-            "Std. Error": ols_model.bse.values,
-            "t-statistic": ols_model.tvalues.values,
-            "p-value": ols_model.pvalues.values,
-            "95% CI Lower": conf[0].values,
-            "95% CI Upper": conf[1].values,
-        })
-    
-        with st.expander("OLS coefficients"):
-            st.dataframe(coef_df, use_container_width=True, hide_index=True)
-    
-        ss_total = float(np.sum((y_train - y_train.mean()) ** 2))
-        ss_resid = float(np.sum(ols_model.resid ** 2))
-        ss_reg = ss_total - ss_resid
-        df_reg = int(ols_model.df_model)
-        df_resid = int(ols_model.df_resid)
-        ms_reg = ss_reg / df_reg if df_reg else np.nan
-        ms_resid = ss_resid / df_resid if df_resid else np.nan
-        f_stat = ms_reg / ms_resid if ms_resid else np.nan
-        f_p = stats.f.sf(f_stat, df_reg, df_resid) if np.isfinite(f_stat) else np.nan
-    
-        anova_df = pd.DataFrame({
-            "Source": ["Regression", "Residual", "Total"],
-            "Sum of Squares": [ss_reg, ss_resid, ss_total],
-            "df": [df_reg, df_resid, df_reg + df_resid],
-            "Mean Square": [ms_reg, ms_resid, np.nan],
-            "F": [f_stat, np.nan, np.nan],
-            "p-value": [f_p, np.nan, np.nan],
-        })
-        with st.expander("ANOVA"):
-            st.dataframe(anova_df, use_container_width=True, hide_index=True)
-    
-        # ------------------------------------------------------------------
-        # Multicollinearity assessment
-        # ------------------------------------------------------------------
-        vif_df = pd.DataFrame()
-        multicollinearity_status = "Not assessed"
-        multicollinearity_summary = "VIF requires at least two usable predictor columns."
-        high_vif_variables = []
-    
-        if X_diag.shape[1] >= 2:
-            vif_rows = []
-            for i, col in enumerate(X_diag.columns):
-                try:
-                    value = float(variance_inflation_factor(X_diag.astype(float).values, i))
-                except Exception:
-                    value = np.inf
-    
-                if not np.isfinite(value):
-                    interpretation = "Very high / not estimable"
-                elif value >= 10:
-                    interpretation = "Very high"
-                elif value >= 5:
-                    interpretation = "High / potentially problematic"
-                else:
-                    interpretation = "Low / no strong VIF indication"
-    
-                vif_rows.append({
-                    "Variable": col,
-                    "VIF": value,
-                    "Interpretation": interpretation
-                })
-    
-            vif_df = pd.DataFrame(vif_rows).sort_values("VIF", ascending=False)
-            high_vif_variables = vif_df.loc[vif_df["VIF"] >= 5, "Variable"].tolist()
-    
-            if high_vif_variables:
-                multicollinearity_status = "Potential multicollinearity detected"
-                multicollinearity_summary = (
-                    "At least one predictor has VIF ≥ 5. This indicates substantial linear dependence "
-                    "with the other predictors and may inflate coefficient standard errors. Review the "
-                    "affected variables before making strong coefficient-level inference."
-                )
-            else:
-                multicollinearity_status = "No strong VIF indication of multicollinearity"
-                multicollinearity_summary = (
-                    "All reported VIF values are below 5, so the VIF diagnostic does not indicate "
-                    "strong multicollinearity in this fitted design matrix."
-                )
-    
-            st.markdown("### Multicollinearity assessment")
-            mc1, mc2 = st.columns([1, 2])
-            mc1.metric("Diagnostic status", multicollinearity_status)
-            mc2.info(multicollinearity_summary)
-    
-            with st.expander("VIF results and interpretation", expanded=bool(high_vif_variables)):
-                st.dataframe(vif_df, use_container_width=True, hide_index=True)
-                st.caption(
-                    "VIF measures how strongly each predictor is linearly explained by the other predictors. "
-                    "A VIF above 5 is a commonly used warning threshold; it is a diagnostic guideline, not a "
-                    "proof that a model is invalid."
-                )
-                if high_vif_variables:
-                    st.warning(
-                        "Variables requiring review: " + ", ".join(high_vif_variables) + ". "
-                        "Consider whether variables measure the same underlying construct, whether one should "
-                        "be removed or combined, or whether regularization is more appropriate for prediction."
-                    )
-                else:
-                    st.success("No predictor exceeded the VIF = 5 warning threshold.")
-    
-            # Pairwise correlation among numeric predictors gives a complementary view.
-            numeric_predictors = X_diag.select_dtypes(include=np.number)
-            if numeric_predictors.shape[1] >= 2:
-                corr = numeric_predictors.corr()
-                pairs = []
-                cols = list(corr.columns)
-                for i in range(len(cols)):
-                    for j in range(i + 1, len(cols)):
-                        r = corr.iloc[i, j]
-                        if np.isfinite(r):
-                            pairs.append({
-                                "Variable 1": cols[i],
-                                "Variable 2": cols[j],
-                                "Correlation (r)": r,
-                                "Absolute |r|": abs(r)
-                            })
-                corr_pairs_df = pd.DataFrame(pairs).sort_values("Absolute |r|", ascending=False) if pairs else pd.DataFrame()
-                with st.expander("Pairwise predictor correlations", expanded=False):
-                    if not corr_pairs_df.empty:
-                        st.dataframe(corr_pairs_df, use_container_width=True, hide_index=True)
-                        strong_pairs = corr_pairs_df[corr_pairs_df["Absolute |r|"] >= 0.80]
-                        if not strong_pairs.empty:
-                            st.warning(
-                                "Strong pairwise correlations (|r| ≥ 0.80) were found. Pairwise correlation and VIF "
-                                "measure related but different aspects of multicollinearity, so interpret them together."
-                            )
-                        else:
-                            st.success("No numeric predictor pair reached |r| = 0.80.")
-                    else:
-                        st.info("Pairwise correlations could not be calculated for the available predictors.")
-            else:
-                corr_pairs_df = pd.DataFrame()
-    
-            # Condition number is an additional global diagnostic for the design matrix.
-            try:
-                condition_number = float(np.linalg.cond(X_sm.astype(float).values))
-            except Exception:
-                condition_number = np.nan
-    
-            with st.expander("Condition number", expanded=False):
-                if np.isfinite(condition_number):
-                    st.metric("Condition number", f"{condition_number:.3f}")
-                    st.caption(
-                        "A large condition number can indicate numerical ill-conditioning or near-linear "
-                        "dependence among columns. It should be interpreted alongside VIF and the actual "
-                        "scaling/units of the predictors."
-                    )
-                else:
-                    st.info("Condition number could not be calculated.")
-        else:
-            corr_pairs_df = pd.DataFrame()
-            condition_number = np.nan
-            st.info("Multicollinearity diagnostics require at least two usable predictor columns.")
-    
-        try:
-            bp = het_breuschpagan(ols_model.resid, X_sm)
-            bp_df = pd.DataFrame({
-                "Test": ["Breusch-Pagan LM", "Breusch-Pagan F"],
-                "Statistic": [bp[0], bp[2]],
-                "p-value": [bp[1], bp[3]]
-            })
-            with st.expander("Breusch-Pagan test"):
-                st.dataframe(bp_df, use_container_width=True, hide_index=True)
-        except Exception as e:
-            bp_df = pd.DataFrame()
-            st.info(f"Breusch-Pagan test was not available: {e}")
-    
-        with st.expander("Full OLS summary"):
-            st.text(ols_model.summary().as_text())
-    
-        diagnostics_rows.extend([
-            {"Metric": "Training observations", "Value": ols_model.nobs},
-            {"Metric": "Training R²", "Value": ols_model.rsquared},
-            {"Metric": "Adjusted R²", "Value": ols_model.rsquared_adj},
-            {"Metric": "F-statistic", "Value": ols_model.fvalue},
-            {"Metric": "Model p-value", "Value": ols_model.f_pvalue},
-            {"Metric": "Multicollinearity status", "Value": multicollinearity_status},
-            {"Metric": "Variables with VIF ≥ 5", "Value": ", ".join(high_vif_variables) if high_vif_variables else "None"},
-            {"Metric": "Condition number", "Value": condition_number},
-        ])
-    except Exception as e:
-        st.warning(
-            "The predictive models completed, but the detailed OLS diagnostics could not be "
-            f"calculated for this dataset: {e}"
-        )
-        diagnostics_rows.append({"Metric": "OLS diagnostics", "Value": "Unavailable"})
-    
-    diagnostics_df = pd.DataFrame(diagnostics_rows)
-    
-with st.container(border=True):
-    st.markdown('<div class="section-label">Step 9 · Research report & export</div>', unsafe_allow_html=True)
-    st.subheader("Download your complete statistical report")
-    st.download_button(
-        "⬇️ Download model comparison CSV",
-        comparison.to_csv(index=False).encode("utf-8"),
-        "model_comparison.csv",
-        "text/csv"
-    )
-    st.download_button(
-        "⬇️ Download all predictions CSV",
-        prediction_table.to_csv(index=False).encode("utf-8"),
-        "all_model_predictions.csv",
-        "text/csv"
-    )
-    st.download_button(
-        "⬇️ Download complete Excel report",
-        make_excel(comparison, prediction_table, coef_df, vif_df, diagnostics_df),
-        "statistical_ai_hybrid_results.xlsx",
-        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-    )
-    
-    report_text = f"""Statistical–AI Regression Analysis Report
-    
-    Outcome: {y_col}
-    Predictors: {', '.join(x_cols)}
-    Usable observations: {len(y)}
-    Training observations: {len(y_train)}
-    Test observations: {len(y_test)}
-    Test-set proportion: {test_size:.2f}
-    Random seed: {int(random_state)}
-    Cross-validation folds: {int(n_splits)}
-    
-    Selected model: {selected_final_model}
-    Selection criterion: {selection_criterion}
-    
-    Model performance:
-    {comparison[report_cols].to_string(index=False)}
-    
-    Interpretation:
-    Lower RMSE and MAE indicate smaller prediction errors. Higher R² indicates greater explained variation relative to the test-set mean baseline. Cross-validation summarizes training-set validation performance, while the hold-out test set provides the final independent performance check for this split.
-    
-    Multicollinearity assessment:
-    {multicollinearity_status}
-    {multicollinearity_summary}
-    Variables with VIF ≥ 5: {", ".join(high_vif_variables) if high_vif_variables else "None"}
-    Condition number: {condition_number if np.isfinite(condition_number) else "Not available"}
-    
-    Important limitation:
-    Model performance is dataset- and validation-design dependent. The selected model is not universally optimal. Statistical inference additionally depends on model specification and assumptions.
-    """
-    st.download_button(
-        "⬇️ Download statistical report (TXT)",
-        report_text.encode("utf-8"),
-        "statistical_ai_full_report.txt",
-        "text/plain"
-    )
-    
-    st.divider()
-    st.caption(
-        "StatAI — Statistical, AI and Hybrid Regression Analyzer | "
-        "For research and educational use. Results depend on data quality, model assumptions, "
-        "validation design and the selected settings."
-    )
+        p=comparison.sort_values('CV RMSE'); fig=go.Figure(go.Bar(x=p.Model,y=p['CV RMSE'],error_y=dict(type='data',array=p['CV RMSE SD'].fillna(0)))); fig.update_layout(title='Mean cross-validation RMSE ± SD',template='plotly_white')
+    fig.update_layout(template='plotly_white',height=600,margin=dict(l=20,r=20,t=70,b=30)); st.plotly_chart(fig,use_container_width=True)
+
+with tabs[8]:
+    st.subheader('📄 Research report & export')
+    pred_table=Xte.reset_index(drop=True).copy(); pred_table.insert(0,'Actual',yte.reset_index(drop=True));
+    for m,p in preds.items(): pred_table[f'Predicted — {m}']=p
+    report_text=f'''STATISTICAL–AI HYBRID MODELLING PLATFORM\n\nOutcome: {y_col}\nPredictors: {", ".join(x_cols)}\nObservations: {len(y)}\nTraining observations: {len(ytr)}\nTest observations: {len(yte)}\nTest proportion: {test_size}\nRandom seed: {seed}\nCV folds: {folds}\nSelection criterion: {criterion}\nSelected model: {selected_model}\n\nMODEL PERFORMANCE\n{comparison.to_string(index=False)}\n\nINTERPRETATION\nResults are conditional on this dataset, preprocessing, model settings and validation design. Full-data OLS inference and hold-out predictive evaluation are separate analyses. Hybrid incremental value should be assessed out-of-sample and should not be assumed a priori.\n'''
+    st.text_area('Report preview',report_text,height=420)
+    c1,c2,c3=st.columns(3)
+    c1.download_button('⬇️ Download comparison CSV',comparison.to_csv(index=False).encode(),file_name='model_comparison.csv',mime='text/csv')
+    c2.download_button('⬇️ Download predictions CSV',pred_table.to_csv(index=False).encode(),file_name='test_predictions.csv',mime='text/csv')
+    c3.download_button('⬇️ Download research report TXT',report_text.encode(),file_name='statistical_ai_report.txt',mime='text/plain')
+    excel=io.BytesIO()
+    with pd.ExcelWriter(excel,engine='openpyxl') as w:
+        df.to_excel(w,'Data',index=False); comparison.to_excel(w,'Model Comparison',index=False); pred_table.to_excel(w,'Test Predictions',index=False); coef.to_excel(w,'OLS Coefficients',index=False); anova.to_excel(w,'ANOVA',index=False)
+        if 'vif' in locals() and not vif.empty: vif.to_excel(w,'VIF',index=False)
+    st.download_button('📘 Download complete Excel report',excel.getvalue(),file_name='statistical_ai_complete_report.xlsx',mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    st.markdown('### Reproducibility note')
+    st.write('The report records the dataset dimensions, selected variables, validation settings, model settings, model-comparison metrics and inference results. For publication-grade work, retain the original dataset, preprocessing decisions, software versions and the final analysis script alongside the exported report.')
+
+st.divider(); st.caption('StatAI • Statistical–AI Hybrid Modelling Platform • Theory → Modelling → Validation → Diagnostics → Interpretation • Research and educational use')
