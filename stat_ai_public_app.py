@@ -125,6 +125,45 @@ if any(X[c].nunique(dropna=True)<2 for c in x_cols): st.error('At least one pred
 
 st.success(f'Loaded **{len(df):,} rows × {len(df.columns):,} columns** • **{len(y):,} usable outcomes**')
 
+# ----------------------------- model computation -----------------------------
+# ----------------------------- model computation -----------------------------
+selected_models=['Linear Regression','Polynomial Regression','Ridge Regression','Lasso Regression','Elastic Net','Random Forest','Gradient Boosting','Linear + AI Residual Hybrid']
+Xtr,Xte,ytr,yte=train_test_split(X,y,test_size=test_size,random_state=int(seed))
+models={
+'Linear Regression':pipe(LinearRegression(),X),
+'Polynomial Regression':pipe(Pipeline([('poly',PolynomialFeatures(degree=int(poly_degree),include_bias=False)),('scale',StandardScaler()),('model',LinearRegression())]),X),
+'Ridge Regression':pipe(Ridge(alpha=1.0),X),
+'Lasso Regression':pipe(Lasso(alpha=.1,max_iter=20000),X),
+'Elastic Net':pipe(ElasticNet(alpha=.1,l1_ratio=.5,max_iter=20000),X),
+'Random Forest':pipe(RandomForestRegressor(n_estimators=int(rf_trees),random_state=int(seed),n_jobs=-1),X),
+'Gradient Boosting':pipe(GradientBoostingRegressor(n_estimators=int(gb_trees),learning_rate=.05,max_depth=3,random_state=int(seed)),X)}
+preds={}; train_preds={}; rows=[]; cvrows=[]
+for name,est in models.items():
+    fit=clone(est); fit.fit(Xtr,ytr); pt=fit.predict(Xte); ptr=fit.predict(Xtr); preds[name]=pt; train_preds[name]=ptr
+    mt=metrics(yte,pt); mtr=metrics(ytr,ptr); cv=[]; kf=KFold(int(folds),shuffle=True,random_state=int(seed))
+    for ti,vi in kf.split(Xtr):
+        fm=clone(est); fm.fit(Xtr.iloc[ti],ytr.iloc[ti]); cv.append(metrics(ytr.iloc[vi],fm.predict(Xtr.iloc[vi])))
+    rows.append({'Model':name,'Type':'AI' if name in ['Random Forest','Gradient Boosting'] else 'Statistical','Train RMSE':mtr['RMSE'],'Train MAE':mtr['MAE'],'Train R²':mtr['R²'],'RMSE':mt['RMSE'],'MAE':mt['MAE'],'R²':mt['R²']})
+    cvrows.append({'Model':name,'CV RMSE':np.mean([z['RMSE'] for z in cv]),'CV RMSE SD':np.std([z['RMSE'] for z in cv],ddof=1),'CV MAE':np.mean([z['MAE'] for z in cv]),'CV MAE SD':np.std([z['MAE'] for z in cv],ddof=1),'CV R²':np.mean([z['R²'] for z in cv]),'CV R² SD':np.std([z['R²'] for z in cv],ddof=1)})
+
+hyb_base=pipe(LinearRegression(),X); hyb_res=pipe(GradientBoostingRegressor(n_estimators=int(gb_trees),learning_rate=.05,max_depth=3,random_state=int(seed)),X)
+hyb_base_fit,hyb_res_fit,hyb_pred,oof=hybrid_fit(hyb_base,hyb_res,Xtr,ytr,Xte,int(folds),int(seed)); hyb_train=hyb_base_fit.predict(Xtr)+hyb_res_fit.predict(Xtr); preds['Linear + AI Residual Hybrid']=hyb_pred; train_preds['Linear + AI Residual Hybrid']=hyb_train
+mh=metrics(yte,hyb_pred); mht=metrics(ytr,hyb_train)
+rows.append({'Model':'Linear + AI Residual Hybrid','Type':'Hybrid','Train RMSE':mht['RMSE'],'Train MAE':mht['MAE'],'Train R²':mht['R²'],'RMSE':mh['RMSE'],'MAE':mh['MAE'],'R²':mh['R²']})
+cvrows.append({'Model':'Linear + AI Residual Hybrid','CV RMSE':np.sqrt(np.mean(oof**2)),'CV RMSE SD':np.nan,'CV MAE':np.mean(np.abs(oof)),'CV MAE SD':np.nan,'CV R²':1-np.sum(oof**2)/np.sum((ytr-ytr.mean())**2),'CV R² SD':np.nan})
+comparison=pd.DataFrame(rows).merge(pd.DataFrame(cvrows),on='Model'); comparison['Generalization Gap R²']=comparison['Train R²']-comparison['R²']; comparison['Test RMSE Rank']=safe_rank(comparison.RMSE,True); comparison['Test MAE Rank']=safe_rank(comparison.MAE,True); comparison['Test R² Rank']=safe_rank(comparison['R²'],False); comparison['Average Test Rank']=comparison[['Test RMSE Rank','Test MAE Rank','Test R² Rank']].mean(axis=1)
+comparison=comparison.sort_values('RMSE').reset_index(drop=True)
+if selection_mode=='Choose manually':
+    manual=st.sidebar.selectbox('Manual final model',comparison.Model.tolist())
+    selected_model=manual
+elif criterion=='Cross-validation RMSE': selected_model=comparison.loc[comparison.CV_RMSE.idxmin() if False else comparison['CV RMSE'].idxmin(),'Model']
+elif criterion=='Cross-validation MAE': selected_model=comparison.loc[comparison['CV MAE'].idxmin(),'Model']
+elif criterion=='Cross-validation R²': selected_model=comparison.loc[comparison['CV R²'].idxmax(),'Model']
+elif criterion=='Test RMSE': selected_model=comparison.loc[comparison.RMSE.idxmin(),'Model']
+elif criterion=='Test MAE': selected_model=comparison.loc[comparison.MAE.idxmin(),'Model']
+else: selected_model=comparison.loc[comparison['R²'].idxmax(),'Model']
+selrow=comparison[comparison.Model==selected_model].iloc[0]
+
 # ----------------------------- tabs -----------------------------
 tabs=st.tabs(['🏠 Overview','📁 Data & EDA','📚 Theory & Model Flowcharts','📈 Predictive Results','🔬 Hybrid Analysis','🩺 Diagnostics & Inference','💡 Results Interpretation','🎨 Chart Studio','📄 Report & Export'])
 
