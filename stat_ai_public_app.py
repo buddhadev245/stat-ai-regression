@@ -144,7 +144,7 @@ with st.sidebar:
     st.divider(); st.subheader("Model selection")
     criterion=st.selectbox("Selection criterion",["Cross-validation RMSE","Cross-validation MAE","Cross-validation R²","Test RMSE","Test MAE","Test R²"])
     selection_mode=st.radio("Final model display",["Automatically select","Choose manually"])
-    st.divider(); st.caption("Research note: full-data fit, statistical inference and out-of-sample prediction are reported separately.")
+    st.divider(); st.caption("Variable selection is available prominently in the main workspace. Full-data fit, statistical inference and out-of-sample prediction are reported separately.")
 
 upload=st.file_uploader("📥 Upload CSV or Excel dataset",type=["csv","xlsx","xls"])
 if upload is None:
@@ -164,22 +164,33 @@ if not numeric:
 
 st.success(f"Loaded **{len(df):,} rows × {len(df.columns):,} columns**")
 
-with st.sidebar:
-    y_col=st.selectbox("Outcome / dependent variable (Y)",numeric)
-
+# Main variable-selection panel
 available=[c for c in df.columns if c!=y_col]
 non_id=[c for c in available if str(c).strip().lower().replace(" ","_") not in ID_NAMES]
 default=[c for c in non_id if c in numeric][:5]
 if not default:
     default=[c for c in available if c in numeric][:5]
 
-x_cols=st.multiselect("Predictors / independent variables (X)",available,default=default)
+st.markdown("### 🎯 Choose your regression variables")
+st.caption("Select the dependent variable (Y) and one or more independent variables (X). The X selector accepts both numeric and categorical predictors. Common identifier columns are excluded from the default selection but remain available if you intentionally want to use one.")
+sel1, sel2 = st.columns([1, 2], gap="large")
+with sel1:
+    y_col=st.selectbox("Dependent variable / outcome (Y)", numeric, key="main_y")
+with sel2:
+    available=[c for c in df.columns if c!=y_col]
+    non_id=[c for c in available if str(c).strip().lower().replace(" ","_") not in ID_NAMES]
+    default=[c for c in non_id if c in numeric][:5]
+    if not default:
+        default=[c for c in available if c in numeric][:5]
+    x_cols=st.multiselect("Independent variables / predictors (X)", available, default=default, key="main_x", help="Choose the variables used to explain or predict Y. You can select multiple variables.")
+
 if not x_cols:
-    st.warning("Select at least one predictor."); st.stop()
+    st.warning("⚠️ Please select at least one independent variable (X) before running the analysis.")
+    st.stop()
 
 excluded_ids=[c for c in available if c not in x_cols and str(c).strip().lower().replace(" ","_") in ID_NAMES]
 if excluded_ids:
-    st.info("Identifier columns excluded from the default predictors: " + ", ".join(excluded_ids))
+    st.info("ℹ️ Identifier columns excluded from the default predictors: " + ", ".join(excluded_ids))
 
 # Show tabs before analysis so the app never crashes just because a model fails.
 tabs=st.tabs(["🏠 Overview","📁 Data & EDA","📊 Full Data Results","📚 Theory, Workflow & Models","📈 Predictive Results","🔬 Hybrid Analysis","🩺 Diagnostics & Inference","💡 Results Interpretation","🎨 Chart Studio","📄 Report & Export"])
@@ -229,10 +240,25 @@ with tabs[3]:
         st.write("Lower RMSE/MAE indicate smaller prediction errors. R² measures improvement relative to a mean-baseline reference on the same evaluation sample.")
         st.markdown("### Validation logic"); st.write("Training data are used for fitting. Cross-validation estimates performance within the training data. The untouched test set is reserved for final out-of-sample evaluation. Full-data OLS inference is a separate analysis and should not be confused with test-set prediction.")
 
-# Analysis button
-run=st.button("🚀 Run / Refresh complete analysis",type="primary",use_container_width=True)
-if not run:
-    st.info("Select your variables and click **Run / Refresh complete analysis** to calculate the regression, AI, hybrid, diagnostics and reports.")
+# Central analysis control — shown only on the Data & EDA tab
+with tabs[1]:
+    st.markdown("### 🚀 Run analysis")
+    st.caption("Choose the dependent variable (Y) and independent variables (X) above, then run the analysis. Other tabs only display the resulting analysis; they do not contain another Run button.")
+    run_clicked=st.button("🚀 Run / Refresh complete analysis",type="primary",use_container_width=True,key="run_analysis_main")
+
+if run_clicked:
+    st.session_state["analysis_ready"]=True
+
+if not st.session_state.get("analysis_ready",False):
+    with tabs[0]:
+        st.info("Choose Y and X in **Data & EDA**, then click **Run / Refresh complete analysis**. Results tabs will populate after the analysis is run.")
+    with tabs[2]: st.info("Run the analysis first from **Data & EDA**.")
+    with tabs[4]: st.info("Run the analysis first from **Data & EDA**.")
+    with tabs[5]: st.info("Run the analysis first from **Data & EDA**.")
+    with tabs[6]: st.info("Run the analysis first from **Data & EDA**.")
+    with tabs[7]: st.info("Run the analysis first from **Data & EDA**.")
+    with tabs[8]: st.info("Run the analysis first from **Data & EDA**. Dataset charts remain available in the Chart Studio after analysis is run.")
+    with tabs[9]: st.info("Run the analysis first from **Data & EDA**.")
     st.stop()
 
 try:
@@ -394,25 +420,151 @@ with tabs[7]:
 
 with tabs[8]:
     st.subheader("🎨 Chart Studio")
-    nums=[c for c in df.columns if pd.api.types.is_numeric_dtype(df[c])]; cats=[c for c in df.columns if c not in nums]
-    chart=st.selectbox("Chart type",["Scatter plot","Histogram","Box plot","Bar chart","Line / trend","Correlation heatmap","Prediction error distribution","CV RMSE with uncertainty"])
-    if chart=="Scatter plot":
-        xx=st.selectbox("X",nums); yy=st.selectbox("Y",nums,index=min(1,len(nums)-1)); fig=px.scatter(df,x=xx,y=yy,title=f"{yy} vs {xx}")
-    elif chart=="Histogram":
-        v=st.selectbox("Variable",nums); fig=px.histogram(df,x=v,nbins=30,title=f"Distribution of {v}")
-    elif chart=="Box plot":
-        v=st.selectbox("Numeric variable",nums); g=st.selectbox("Group",["None"]+cats); fig=px.box(df,y=v,x=None if g=="None" else g,points="outliers",title=f"Box plot of {v}")
-    elif chart=="Bar chart":
-        g=st.selectbox("Category",cats or df.columns.tolist()); v=st.selectbox("Numeric measure",nums); p=df.groupby(g,dropna=False)[v].mean().reset_index(); fig=px.bar(p,x=g,y=v,title=f"Mean {v} by {g}")
-    elif chart=="Line / trend":
-        v=st.selectbox("Numeric variable",nums); fig=px.line(df.reset_index(),x="index",y=v,title=f"{v} across row order")
-    elif chart=="Correlation heatmap":
-        fig=px.imshow(df[nums].corr(),text_auto=".2f",aspect="auto",title="Pearson correlation matrix",color_continuous_scale="RdBu_r")
-    elif chart=="Prediction error distribution":
-        err=pd.DataFrame({m:yte.to_numpy()-p for m,p in preds.items()}); lm=err.melt(var_name="Model",value_name="Error"); fig=px.histogram(lm,x="Error",color="Model",barmode="overlay",nbins=35,title="Test prediction error distributions")
-    else:
-        p=comparison.sort_values("CV RMSE"); fig=go.Figure(go.Bar(x=p.Model,y=p["CV RMSE"],error_y=dict(type="data",array=p["CV RMSE SD"].fillna(0)))); fig.update_layout(title="Mean cross-validation RMSE ± SD")
-    fig.update_layout(template="plotly_white",height=600,margin=dict(l=20,r=20,t=70,b=30)); st.plotly_chart(fig,use_container_width=True)
+    st.caption("Build charts directly from your uploaded dataset or from the model results. Choose the chart, variables and grouping options below.")
+    chart_tabs=st.tabs(["📊 Dataset Explorer","📈 Model Diagnostics"])
+
+    with chart_tabs[0]:
+        nums=[c for c in df.columns if pd.api.types.is_numeric_dtype(df[c])]
+        cats=[c for c in df.columns if c not in nums]
+        if not nums:
+            st.warning("No numeric variables are available for charting.")
+        else:
+            c1,c2=st.columns([1,2],gap="large")
+            with c1:
+                chart_type=st.selectbox("Choose chart",["Scatter plot","Histogram","Box plot","Bar chart","Line / trend","Correlation heatmap"],key="studio_chart")
+            with c2:
+                st.markdown("**Chart purpose**")
+                purpose={
+                    "Scatter plot":"Explore the relationship between two numeric variables.",
+                    "Histogram":"Inspect the distribution of one numeric variable.",
+                    "Box plot":"Compare a numeric variable across groups and identify outliers.",
+                    "Bar chart":"Compare group-level averages for a numeric measure.",
+                    "Line / trend":"Inspect an ordered trend using a numeric or date-like x variable.",
+                    "Correlation heatmap":"Inspect pairwise linear correlation among numeric variables."
+                }[chart_type]
+                st.info(purpose)
+
+            fig=None
+            if chart_type=="Scatter plot":
+                a,b,c=st.columns(3)
+                with a: xx=st.selectbox("X variable",nums,key="scatter_x")
+                with b:
+                    ychoices=[n for n in nums if n!=xx] or nums
+                    yy=st.selectbox("Y variable",ychoices,key="scatter_y")
+                with c:
+                    group_choices=["None"]+cats
+                    gg=st.selectbox("Colour / group",group_choices,key="scatter_group")
+                plot_df=df[[xx,yy]+([] if gg=="None" else [gg])].dropna()
+                if plot_df.empty: st.warning("No complete rows are available for this chart.")
+                else:
+                    fig=px.scatter(plot_df,x=xx,y=yy,color=None if gg=="None" else gg,hover_data=plot_df.columns,title=f"{yy} vs {xx}")
+                    fig.update_traces(marker=dict(size=8,opacity=.72))
+
+            elif chart_type=="Histogram":
+                a,b,c=st.columns(3)
+                with a: v=st.selectbox("Variable",nums,key="hist_var")
+                with b: bins=st.slider("Number of bins",10,80,30,5,key="hist_bins")
+                with c: group_choices=["None"]+cats; gg=st.selectbox("Colour / group",group_choices,key="hist_group")
+                plot_df=df[[v]+([] if gg=="None" else [gg])].dropna()
+                fig=px.histogram(plot_df,x=v,color=None if gg=="None" else gg,nbins=bins,barmode="overlay" if gg!="None" else "relative",title=f"Distribution of {v}")
+
+            elif chart_type=="Box plot":
+                a,b=st.columns(2)
+                with a: v=st.selectbox("Numeric variable",nums,key="box_var")
+                with b: gg=st.selectbox("Group by",["None"]+cats,key="box_group")
+                plot_df=df[[v]+([] if gg=="None" else [gg])].dropna()
+                fig=px.box(plot_df,y=v,x=None if gg=="None" else gg,points="outliers",color=None if gg=="None" else gg,title=f"Box plot of {v}")
+
+            elif chart_type=="Bar chart":
+                if not cats:
+                    st.info("Bar charts need at least one categorical/grouping variable. Use Scatter, Histogram, Box or Correlation instead.")
+                else:
+                    a,b,c=st.columns(3)
+                    with a: gg=st.selectbox("Category / group",cats,key="bar_group")
+                    with b: v=st.selectbox("Numeric measure",nums,key="bar_value")
+                    with c: agg=st.selectbox("Aggregation",["Mean","Median","Sum","Count"],key="bar_agg")
+                    temp=df[[gg,v]].dropna()
+                    if agg=="Mean": p=temp.groupby(gg,dropna=False)[v].mean().reset_index(name="Value")
+                    elif agg=="Median": p=temp.groupby(gg,dropna=False)[v].median().reset_index(name="Value")
+                    elif agg=="Sum": p=temp.groupby(gg,dropna=False)[v].sum().reset_index(name="Value")
+                    else: p=temp.groupby(gg,dropna=False)[v].count().reset_index(name="Value")
+                    p=p.sort_values("Value",ascending=False).head(30)
+                    fig=px.bar(p,x=gg,y="Value",text_auto=".2f",title=f"{agg} of {v} by {gg}")
+
+            elif chart_type=="Line / trend":
+                a,b,c=st.columns(3)
+                with a: xx=st.selectbox("X / order variable",df.columns.tolist(),key="line_x")
+                with b: v=st.selectbox("Numeric measure",nums,key="line_y")
+                with c: gg=st.selectbox("Group",["None"]+cats,key="line_group")
+                temp=df[[xx,v]+([] if gg=="None" else [gg])].dropna().copy()
+                # Preserve chronological order when a date-like column is selected; otherwise preserve dataset order.
+                parsed=pd.to_datetime(temp[xx],errors="coerce")
+                if parsed.notna().mean()>=.8:
+                    temp["__x_order"]=parsed; temp=temp.sort_values("__x_order"); temp[xx]=temp["__x_order"].dt.strftime("%Y-%m-%d")
+                fig=px.line(temp,x=xx,y=v,color=None if gg=="None" else gg,markers=True,title=f"{v} across {xx}")
+
+            else:
+                corr=df[nums].corr(numeric_only=True)
+                if corr.shape[0]<2:
+                    st.warning("At least two numeric variables are needed for a correlation heatmap.")
+                else:
+                    fig=px.imshow(corr,text_auto=".2f",aspect="auto",title="Pearson correlation heatmap",color_continuous_scale="RdBu_r",zmin=-1,zmax=1)
+
+            if fig is not None:
+                fig.update_layout(template="plotly_white",height=560,margin=dict(l=30,r=30,t=80,b=50),hovermode="closest")
+                st.plotly_chart(fig,use_container_width=True)
+                st.caption("Charts are exploratory: associations and visual patterns do not by themselves establish causation.")
+
+    with chart_tabs[1]:
+        st.markdown("### Model-based visual diagnostics")
+        diag_chart=st.selectbox("Choose diagnostic chart",["Test actual vs predicted","Test residuals vs predicted","Prediction error distribution","Cross-validation RMSE","Full-data R² comparison","Feature importance"],key="diag_chart")
+        fig=None
+        if diag_chart=="Test actual vs predicted":
+            model_for_chart=st.selectbox("Model",list(preds.keys()),key="diag_pred_model")
+            temp=pd.DataFrame({"Actual":yte.to_numpy(),"Predicted":preds[model_for_chart]})
+            fig=px.scatter(temp,x="Actual",y="Predicted",title=f"Actual vs predicted — {model_for_chart}",trendline="ols")
+            mn=float(min(temp["Actual"].min(),temp["Predicted"].min())); mx=float(max(temp["Actual"].max(),temp["Predicted"].max()))
+            fig.add_shape(type="line",x0=mn,x1=mx,y0=mn,y1=mx,line_dash="dash")
+
+        elif diag_chart=="Test residuals vs predicted":
+            model_for_chart=st.selectbox("Model",list(preds.keys()),key="diag_resid_model")
+            residual=yte.to_numpy()-preds[model_for_chart]
+            temp=pd.DataFrame({"Predicted":preds[model_for_chart],"Residual":residual})
+            fig=px.scatter(temp,x="Predicted",y="Residual",title=f"Residuals vs predicted — {model_for_chart}")
+            fig.add_hline(y=0,line_dash="dash")
+
+        elif diag_chart=="Prediction error distribution":
+            model_for_chart=st.selectbox("Model",list(preds.keys()),key="diag_error_model")
+            residual=yte.to_numpy()-preds[model_for_chart]
+            fig=px.histogram(x=residual,nbins=30,marginal="box",title=f"Prediction error distribution — {model_for_chart}",labels={"x":"Prediction error"})
+
+        elif diag_chart=="Cross-validation RMSE":
+            p=comparison.sort_values("CV RMSE")
+            fig=go.Figure(go.Bar(x=p["Model"],y=p["CV RMSE"],error_y=dict(type="data",array=p["CV RMSE SD"].fillna(0))))
+            fig.update_layout(title="Cross-validation RMSE ± SD",xaxis_title="Model",yaxis_title="CV RMSE")
+
+        elif diag_chart=="Full-data R² comparison":
+            p=full_comparison.sort_values("R²",ascending=False)
+            fig=px.bar(p,x="Model",y="R²",color="Type",text_auto=".3f",title="Full-data R² comparison")
+            fig.update_yaxes(range=[max(0,float(p["R²"].min())-.05),min(1,float(p["R²"].max())+.05)])
+
+        else:
+            # Tree-based feature importance after preprocessing. This is available for the two standalone AI models.
+            model_for_chart=st.selectbox("AI model",[m for m in ["Random Forest","Gradient Boosting"] if m in specs],key="importance_model")
+            ai_fit=make_clone(specs[model_for_chart]); ai_fit.fit(Xtr,ytr)
+            prep=ai_fit.named_steps["prep"]; mdl=ai_fit.named_steps["model"]
+            names=list(prep.get_feature_names_out())
+            vals=getattr(mdl,"feature_importances_",None)
+            if vals is None:
+                st.info("Feature importance is not available for this model.")
+            else:
+                fi=pd.DataFrame({"Feature":names,"Importance":vals}).sort_values("Importance",ascending=False).head(25)
+                fig=px.bar(fi.sort_values("Importance"),x="Importance",y="Feature",orientation="h",title=f"Top feature importances — {model_for_chart}",text_auto=".3f")
+
+        if fig is not None:
+            fig.update_layout(template="plotly_white",height=600,margin=dict(l=30,r=30,t=80,b=50),hovermode="closest")
+            st.plotly_chart(fig,use_container_width=True)
+            st.caption("Diagnostic charts support model checking; they should be interpreted together with numerical metrics and statistical diagnostics.")
 
 with tabs[9]:
     st.subheader("📄 Report & Export")
@@ -426,4 +578,4 @@ with tabs[9]:
         df.to_excel(w,"Data",index=False); full_comparison.to_excel(w,"Full Data Results",index=False); comparison.to_excel(w,"Model Comparison",index=False); pred_table.to_excel(w,"Test Predictions",index=False); coef.to_excel(w,"OLS Coefficients",index=False); anova.to_excel(w,"ANOVA",index=False); vif.to_excel(w,"VIF",index=False)
     st.download_button("📘 Complete Excel report",excel.getvalue(),"statistical_ai_complete_report.xlsx","application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
-st.divider(); st.caption("StatAI v8 • Statistical–AI Hybrid Modelling Platform • Research and educational use")
+st.divider(); st.caption("StatAI v11 • Statistical–AI Hybrid Modelling Platform • Research and educational use")
