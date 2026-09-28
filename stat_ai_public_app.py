@@ -47,6 +47,168 @@ st.markdown('<div class="hero"><div class="kicker">Research • prediction • i
 ID_NAMES={"id","identifier","employee_id","student_id","customer_id","record_id","serial_no","serial_number","roll_no","roll_number","row_id","index"}
 MODEL_NAMES=["Linear Regression","Polynomial Regression","Ridge Regression","Lasso Regression","Elastic Net","Random Forest","Gradient Boosting","Linear + AI Residual Hybrid"]
 
+THEORY_SOURCES={
+    "Linear Regression": {
+        "theory":"https://online.stat.psu.edu/stat501/Lesson01",
+        "theory_label":"Penn State STAT 501 — least-squares coefficients",
+        "code":"https://www.statsmodels.org/dev/examples/notebooks/generated/ols.html",
+        "code_label":"Statsmodels — OLS Python notebook"
+    },
+    "Polynomial Regression": {
+        "theory":"https://docs.originlab.com/origin-help/pr-algorithm/",
+        "theory_label":"OriginLab — polynomial least-squares algorithm and coefficient calculation",
+        "code":"https://scikit-learn.org/stable/auto_examples/model_selection/plot_underfitting_overfitting.html",
+        "code_label":"Scikit-learn — polynomial regression Python example"
+    },
+    "Ridge Regression": {
+        "theory":"https://www2.stat.duke.edu/courses/Fall17/sta721/publication/ridge/",
+        "theory_label":"Duke STA 721 — Ridge derivation and shrinkage theory",
+        "code":"https://scikit-learn.org/stable/auto_examples/linear_model/plot_ridge_coeffs.html",
+        "code_label":"Scikit-learn — Ridge coefficients Python example"
+    },
+    "Lasso Regression": {
+        "theory":"https://www.cs.cmu.edu/~pradeepr/convexopt/Lecture_Slides/coordinate_descent.pdf",
+        "theory_label":"CMU — Lasso coordinate-descent and soft-threshold derivation",
+        "code":"https://scikit-learn.org/stable/auto_examples/linear_model/plot_lasso_model_selection.html",
+        "code_label":"Scikit-learn — Lasso model-selection Python example"
+    },
+    "Elastic Net": {
+        "theory":"https://faculty.cc.gatech.edu/~isbell/reading/papers/elasticnet.pdf",
+        "theory_label":"Zou & Hastie — original Elastic Net theory",
+        "code":"https://scikit-learn.org/stable/auto_examples/linear_model/plot_elastic_net_precomputed_gram_matrix_with_weighted_samples.html",
+        "code_label":"Scikit-learn — Elastic Net Python example"
+    },
+    "Random Forest": {
+        "theory":"https://web.iitd.ac.in/~sumeet/Hastie.pdf",
+        "theory_label":"Elements of Statistical Learning — Random Forest theory",
+        "code":"https://www.datacamp.com/tutorial/random-forest-regression",
+        "code_label":"DataCamp — Random Forest Regression Python example"
+    },
+    "Gradient Boosting": {
+        "theory":"https://scikit-learn.org/stable/modules/ensemble.html",
+        "theory_label":"Scikit-learn — Gradient Boosting objective and algorithm",
+        "code":"https://scikit-learn.org/stable/auto_examples/ensemble/plot_gradient_boosting_regression.html",
+        "code_label":"Scikit-learn — Gradient Boosting Python example"
+    },
+    "Linear + AI Residual Hybrid": {
+        "theory":"https://link.springer.com/article/10.1007/s11270-026-09831-4",
+        "theory_label":"Springer — out-of-fold residual-correction framework",
+        "code":"https://www.google.com/search?q=site%3Agithub.com+python+residual+correction+hybrid+regression+machine+learning",
+        "code_label":"GitHub search — Python residual-correction examples"
+    },
+}
+
+
+def chart_guidance(title):
+    """Beginner-friendly explanation + research caution for a displayed Plotly chart."""
+    t=str(title or "").lower()
+    if "actual vs predicted" in t and "identity" not in t:
+        return (
+            "Actual values are the observed outcomes; predicted values are the model's estimates. "
+            "Points/lines that stay close to one another indicate smaller prediction errors.",
+            "Do not judge a model from the training plot alone. Use the untouched test set for the main predictive interpretation. "
+            "A curve or systematic gap can indicate bias or missing structure, but random scatter is not proof of a perfect model.",
+            "Compare the graph with RMSE, MAE and test R². Check whether high values are consistently under-predicted or low values over-predicted."
+        )
+    if "identity" in t:
+        return (
+            "Each point compares an observed value with its prediction. The diagonal 1:1 line is perfect prediction: predicted = actual.",
+            "Distance from the diagonal represents prediction error. A close cloud is desirable, but a visually tight plot on training data can still reflect overfitting.",
+            "Inspect the held-out test data, not only training data. Also look for systematic bending or widening away from the line."
+        )
+    if "residuals vs predicted" in t:
+        return (
+            "Residual = Actual − Predicted. A roughly random band around zero is compatible with a well-behaved error pattern.",
+            "A curved pattern can suggest missing nonlinear structure; a funnel shape can suggest changing error variance; clusters may indicate groups or omitted variables.",
+            "Use this plot with formal diagnostics such as Breusch–Pagan and with subject-matter knowledge. A pattern is a warning to investigate, not automatic proof of model failure."
+        )
+    if "residual distribution" in t or "prediction error distribution" in t:
+        return (
+            "The plot shows how prediction errors are distributed. A centre near zero means little average signed bias; a wide spread means larger prediction errors.",
+            "Extreme tails or strong skewness can indicate outliers or asymmetric error behaviour. Do not assume normality solely because the histogram looks roughly bell-shaped.",
+            "Interpret the error scale in the units of Y. Combine the graph with MAE/RMSE and, for OLS inference, Q–Q or formal residual diagnostics when needed."
+        )
+    if "missing" in t:
+        return (
+            "Each bar shows how much data are missing for a variable. Larger bars mean more observations are unavailable for that variable.",
+            "High missingness can change the effective sample size and may introduce bias if missingness is systematic rather than random.",
+            "Investigate why data are missing before simply deleting rows. The warning level depends on the variable, sample size and missing-data mechanism."
+        )
+    if "correlation" in t:
+        return (
+            "Correlation summarises the strength and direction of a linear association between numeric variables, from −1 to +1.",
+            "Correlation does not establish causation and can miss nonlinear relationships. A high correlation can also indicate multicollinearity when both variables are used as predictors.",
+            "Use the heatmap as an exploratory screen, then inspect scatterplots and VIF before making regression claims."
+        )
+    if "importance" in t:
+        return (
+            "Feature importance ranks variables by their contribution to the fitted tree ensemble under the chosen importance measure.",
+            "Importance is not a regression coefficient and is not a causal effect. Tree importance can also be influenced by variable scale, cardinality and correlated predictors.",
+            "Treat importance as a model-specific predictive explanation. For stronger interpretation, compare it with permutation importance or other model-agnostic methods."
+        )
+    if "rmse" in t and "cv" in t:
+        return (
+            "Lower RMSE means smaller typical prediction error, with greater penalty for large errors. Cross-validation RMSE summarises performance across training folds.",
+            "Small differences can be unstable, especially with small samples. A single split should not be treated as universal evidence.",
+            "Look at both the mean and fold-to-fold variation. Compare against the untouched test result before drawing conclusions."
+        )
+    if "r²" in t or "r2" in t:
+        return (
+            "R² describes how much variation in the target is explained relative to a mean-prediction reference on the evaluation sample.",
+            "R² is not an accuracy percentage and can be negative on unseen data. A high R² does not establish causation or guarantee good performance outside the study population.",
+            "Always state whether the value is from full-data, training, cross-validation or test observations."
+        )
+    if "train vs test" in t or "full-data vs test" in t:
+        return (
+            "The comparison shows how model performance changes between data used for fitting and data not used for fitting.",
+            "A large training–test gap is a classic warning sign of overfitting. A small gap can occur because both performances are modest as well.",
+            "Use the gap together with cross-validation, sample size and model complexity rather than using a fixed numerical cutoff."
+        )
+    if "metric heatmap" in t or "model performance" in t or "test rmse" in t or "model comparison" in t:
+        return (
+            "The chart compares models using common metrics on the same evaluation design, making relative performance easier to see.",
+            "One metric can favour a model that behaves differently on another metric. Do not treat a visual ranking as proof of universal superiority.",
+            "Read the numerical table beside the plot and consider uncertainty, validation design, model purpose and interpretability."
+        )
+    if "box" in t or "violin" in t:
+        return (
+            "The plot summarises the centre, spread and unusual values of a numeric variable, optionally by group.",
+            "A group difference in the plot is descriptive; it does not by itself prove a statistically significant difference or a causal effect.",
+            "Look at sample sizes per group and consider confidence intervals or formal tests where appropriate."
+        )
+    if "histogram" in t or "distribution" in t:
+        return (
+            "The distribution shows where observations are concentrated and whether the variable is symmetric, skewed or has unusual values.",
+            "The appearance depends on bin width and sample size. A histogram alone is not a formal normality test.",
+            "Use the distribution to guide preprocessing and model choice, and combine it with summary statistics and subject knowledge."
+        )
+    if "scatter" in t or "trend" in t:
+        return (
+            "Each point is an observation. The shape, direction and spread indicate whether the variables appear linearly or nonlinearly related.",
+            "Association is not causation. Outliers, hidden groups and changing variance can strongly affect the apparent pattern.",
+            "Check sample size, subgroup structure, unusual observations and whether the plotted scale hides important features."
+        )
+    return (
+        "Read the title, axes, legend and units first. Then identify the main pattern, unusual observations and the amount of uncertainty or variation.",
+        "A graph is evidence about the displayed sample and model; it is not automatically proof of causality or generalisation.",
+        "Use the graph together with the numerical results, validation design and subject-matter context."
+    )
+
+
+def plot_with_guidance(fig):
+    """Display a Plotly chart followed by plain-language interpretation, warning and next step."""
+    st.plotly_chart(fig,use_container_width=True)
+    title=""
+    try:
+        title=fig.layout.title.text or "this graph"
+    except Exception:
+        title="this graph"
+    interpretation,warning,suggestion=chart_guidance(title)
+    with st.expander("🧭 How to interpret this graph",expanded=False):
+        st.markdown(f"**What you are seeing:** {interpretation}")
+        st.markdown(f"**⚠️ Caution:** {warning}")
+        st.markdown(f"**✅ What to check next:** {suggestion}")
+
 
 def read_data(upload):
     if upload.name.lower().endswith(".csv"):
@@ -188,7 +350,7 @@ if excluded_ids:
     st.info("ℹ️ Identifier columns excluded from the default predictors: " + ", ".join(excluded_ids))
 
 # Show tabs before analysis so the app never crashes just because a model fails.
-tabs=st.tabs(["🏠 Overview","📁 Data & EDA","📊 Full Data Results","📚 Theory, Workflow & Models","📈 Predictive Results","🔬 Hybrid Analysis","🩺 Diagnostics & Inference","💡 Results Interpretation","🎨 Chart Studio","📄 Report & Export"])
+tabs=st.tabs(["🏠 Overview","📁 Data & EDA","📊 Full Data Results","📚 Theory, Workflow & Models","📈 Predictive Results","🔬 Hybrid Analysis","🩺 Diagnostics & Inference","💡 Results Interpretation","⚠️ Model Limitations","🎨 Chart Studio","📄 Report & Export"])
 
 with tabs[0]:
     st.markdown('<div class="card"><h2>Analysis overview</h2><p>Upload data, inspect quality, choose the outcome and predictors, run the models, compare full-data fit with out-of-sample prediction, examine the residual hybrid, check diagnostics, and interpret the evidence.</p></div>',unsafe_allow_html=True)
@@ -204,11 +366,16 @@ with tabs[1]:
     st.dataframe(q,use_container_width=True,hide_index=True)
     num_cols=[c for c in df.columns if pd.api.types.is_numeric_dtype(df[c])]
     if len(num_cols)>=2:
-        st.plotly_chart(px.imshow(df[num_cols].corr(),text_auto=".2f",aspect="auto",title="Numeric correlation matrix",color_continuous_scale="RdBu_r"),use_container_width=True)
+        eda_fig=px.imshow(df[num_cols].corr(),text_auto=".2f",aspect="auto",title="Numeric correlation matrix",color_continuous_scale="RdBu_r")
+        plot_with_guidance(eda_fig)
 
 with tabs[3]:
     st.subheader("📚 Regression Theory & How It Works")
-    st.caption("This research-oriented guide explains what each model estimates, the mathematics behind it, how this application runs it, what to look for in the output, and the main limitations.")
+    st.caption("This research-oriented guide is written for two audiences at the same time: a beginner who wants to understand what the button is doing, and a PhD researcher who wants the mathematical estimation logic, validation design and limitations.")
+    with st.expander("🎓 How to use this theory section",expanded=True):
+        st.markdown("**Beginner path:** What is the model? → What goes in? → What comes out? → What does the graph mean? → What warning should I remember?")
+        st.markdown("**Research path:** Model specification → objective function → estimation/optimisation → assumptions → validation → inferential/predictive interpretation → limitations.")
+        st.info("A strong result is not just a small error number. It is a result that remains sensible under appropriate validation, diagnostics and the context of the research question.")
 
     theory_tabs=st.tabs(["🧭 Complete process","📐 Regression models","🤖 AI models","🔗 Hybrid regression","📊 Validation & inference"])
 
@@ -311,6 +478,51 @@ with tabs[3]:
         st.write(model_info["interpret"])
         st.markdown("**Important limitations**")
         st.warning(model_info["caution"])
+        src=THEORY_SOURCES.get(model_pick)
+        if src:
+            st.markdown("### 📚 Recommended learning sources")
+            st.markdown(f"**Full theory / coefficient calculation:** [{src['theory_label']}]({src['theory']})")
+            st.markdown(f"**Python example:** [{src['code_label']}]({src['code']})")
+            st.caption("The theory link is selected for mathematical depth and/or a transparent derivation. The Python link is selected for a runnable worked example.")
+            st.markdown("### 🧑‍🏫 Step-by-step calculation guide")
+            step_guides={
+                "Linear Regression":[
+                    "1. Build the design matrix X, including an intercept when appropriate.",
+                    "2. Compute fitted values Xβ and residuals y−Xβ.",
+                    "3. Define SSE = Σ(yᵢ−ŷᵢ)².",
+                    "4. Minimise SSE with respect to β; the normal-equation solution is β̂=(XᵀX)⁻¹Xᵀy when the inverse exists.",
+                    "5. Use β̂ to obtain fitted values, residuals, standard errors, confidence intervals and predictions."
+                ],
+                "Polynomial Regression":[
+                    "1. Start with the original predictors.",
+                    "2. Generate powers/interactions such as X², X³ or X₁X₂.",
+                    "3. Treat these generated terms as columns of an expanded design matrix.",
+                    "4. Estimate their coefficients by least squares on the expanded matrix.",
+                    "5. Validate degree choice because extra terms increase flexibility and can overfit."
+                ],
+                "Ridge Regression":[
+                    "1. Prepare and scale predictors so the penalty is comparable across variables.",
+                    "2. Minimise SSE + αΣβⱼ².",
+                    "3. Solve the penalised normal equations; for centred predictors β̂=(XᵀX+αI)⁻¹Xᵀy.",
+                    "4. Larger α produces stronger coefficient shrinkage.",
+                    "5. Compare α values using cross-validation rather than choosing it only from training fit."
+                ],
+                "Lasso Regression":[
+                    "1. Prepare and scale predictors.",
+                    "2. Minimise SSE + αΣ|βⱼ|.",
+                    "3. Use an iterative optimiser such as coordinate descent.",
+                    "4. Each coordinate update uses soft-thresholding, so some coefficients can become exactly zero.",
+                    "5. Choose α with validation because stronger penalties can also remove useful predictors."
+                ],
+                "Elastic Net":[
+                    "1. Prepare and scale predictors.",
+                    "2. Combine L1 and L2 penalties in one objective.",
+                    "3. Optimise the convex objective, commonly with coordinate descent.",
+                    "4. α controls overall penalty strength and l1_ratio controls the L1/L2 mixture in scikit-learn.",
+                    "5. Tune the hyperparameters with cross-validation."
+                ],
+            }
+            for s in step_guides.get(model_pick,[]): st.markdown(s)
 
     with theory_tabs[2]:
         ai_pick=st.selectbox("Select an AI regression method to study",["Random Forest","Gradient Boosting"],key="theory_ai_model")
@@ -325,6 +537,11 @@ with tabs[3]:
             st.write("The app preprocesses the selected X variables, trains the requested number of trees on the training data, predicts the test set, performs cross-validation, and reports test and full-data metrics. Feature importance can be inspected in Chart Studio.")
             st.markdown("**Strengths and cautions**")
             st.write("It can capture nonlinear effects and interactions without the analyst specifying each interaction term. It can still overfit under inappropriate settings, and tree-based feature importance should not be interpreted as a causal effect or a regression coefficient.")
+            st.markdown("### 📚 Recommended learning sources")
+            src=THEORY_SOURCES["Random Forest"]
+            st.markdown(f"**Full theory:** [{src['theory_label']}]({src['theory']})")
+            st.markdown(f"**Python example:** [{src['code_label']}]({src['code']})")
+            st.markdown("**Beginner calculation:** For one new observation, follow it through each tree, read the leaf prediction, then average the tree predictions.")
         else:
             st.markdown("### Gradient Boosting Regression")
             st.write("Gradient Boosting builds an additive ensemble sequentially. The first model gives an initial prediction; each new tree is fitted to the remaining error signal, and the ensemble is updated by a learning rate.")
@@ -336,6 +553,11 @@ with tabs[3]:
             st.write("The app fits GradientBoostingRegressor with the configured tree count, learning rate and depth settings, evaluates it on the test set, runs cross-validation, and exposes feature importance in Chart Studio.")
             st.markdown("**Cautions**")
             st.write("Boosting can fit noise when too flexible. Cross-validation and the untouched test set are therefore important. Feature importance describes predictive contribution within the fitted ensemble; it is not a causal effect size.")
+            st.markdown("### 📚 Recommended learning sources")
+            src=THEORY_SOURCES["Gradient Boosting"]
+            st.markdown(f"**Full theory:** [{src['theory_label']}]({src['theory']})")
+            st.markdown(f"**Python example:** [{src['code_label']}]({src['code']})")
+            st.markdown("**Beginner calculation:** Start with the initial prediction, calculate the current error/negative gradient, fit a correction tree, shrink its contribution by the learning rate, update the prediction, and repeat.")
 
     with theory_tabs[3]:
         st.markdown("### Residual-learning hybrid regression")
@@ -359,6 +581,11 @@ with tabs[3]:
         st.write("It can help when the statistical component captures a meaningful interpretable structure but leaves residual patterns that are systematic and predictable. If the base model already captures the systematic signal or the remaining residual is mostly irreducible noise, an AI correction may add little or may overfit.")
         st.markdown("**How the app evaluates it**")
         st.write("The hybrid is compared with the base statistical model using the same held-out test set. The important quantity is the out-of-sample change in error, not the improvement obtained by fitting the hybrid to the same observations used for evaluation.")
+        src=THEORY_SOURCES["Linear + AI Residual Hybrid"]
+        st.markdown("### 📚 Recommended learning sources")
+        st.markdown(f"**Theory / methodology example:** [{src['theory_label']}]({src['theory']})")
+        st.markdown(f"**Python examples:** [{src['code_label']}]({src['code']})")
+        st.caption("Hybrid residual correction is an active research area; implementations vary by base model, residual construction and validation design.")
 
     with theory_tabs[4]:
         st.markdown("### Prediction metrics")
@@ -392,8 +619,9 @@ if not st.session_state.get("analysis_ready",False):
     with tabs[5]: st.info("Run the analysis first from **Data & EDA**.")
     with tabs[6]: st.info("Run the analysis first from **Data & EDA**.")
     with tabs[7]: st.info("Run the analysis first from **Data & EDA**.")
-    with tabs[8]: st.info("Run the analysis first from **Data & EDA**. Dataset charts remain available in the Chart Studio after analysis is run.")
-    with tabs[9]: st.info("Run the analysis first from **Data & EDA**.")
+    with tabs[8]: st.info("Run the analysis first from **Data & EDA**.")
+    with tabs[9]: st.info("Run the analysis first from **Data & EDA**. Dataset charts remain available in the Chart Studio after the analysis is run.")
+    with tabs[10]: st.info("Run the analysis first from **Data & EDA**.")
     st.stop()
 
 try:
@@ -501,7 +729,7 @@ with tabs[2]:
     if osm is not None:
         a,b,c,d=st.columns(4); a.metric("OLS R²",f"{osm.rsquared:.4f}"); b.metric("Adjusted R²",f"{osm.rsquared_adj:.4f}"); c.metric("F-statistic",f"{osm.fvalue:.3f}"); d.metric("Model p-value",f"{osm.f_pvalue:.3g}")
     st.dataframe(full_comparison,use_container_width=True,hide_index=True)
-    fig=px.bar(full_comparison,x="Model",y="R²",color="Type",title="Full-data R² comparison",text_auto=".3f"); fig.update_layout(template="plotly_white",height=500,xaxis_tickangle=-35); st.plotly_chart(fig,use_container_width=True)
+    fig=px.bar(full_comparison,x="Model",y="R²",color="Type",title="Full-data R² comparison",text_auto=".3f"); fig.update_layout(template="plotly_white",height=500,xaxis_tickangle=-35); plot_with_guidance(fig)
     if not coef.empty:
         with st.expander("Full-data OLS coefficients",expanded=True): st.dataframe(coef,use_container_width=True,hide_index=True)
 
@@ -511,9 +739,9 @@ with tabs[4]:
     a,b,c,d=st.columns(4); a.metric("Selected model",selected_model); b.metric("Test RMSE",f"{float(selrow['RMSE']):.4f}"); c.metric("Test MAE",f"{float(selrow['MAE']):.4f}"); d.metric("Test R²",f"{float(selrow['R²']):.4f}")
     st.caption(f"Selection criterion: {criterion}. Training observations: {len(ytr):,}; untouched test observations: {len(yte):,}.")
     st.dataframe(comparison,use_container_width=True,hide_index=True)
-    fig=px.bar(comparison.sort_values("RMSE"),x="Model",y="RMSE",color="Type",title="Test RMSE by model",text_auto=".3f"); fig.update_layout(template="plotly_white",height=500,xaxis_tickangle=-35); st.plotly_chart(fig,use_container_width=True)
+    fig=px.bar(comparison.sort_values("RMSE"),x="Model",y="RMSE",color="Type",title="Test RMSE by model",text_auto=".3f"); fig.update_layout(template="plotly_white",height=500,xaxis_tickangle=-35); plot_with_guidance(fig)
     pred_long=pd.DataFrame({"Actual":np.tile(yte.to_numpy(),len(preds)),"Predicted":np.concatenate(list(preds.values())),"Model":np.repeat(list(preds.keys()),len(yte))})
-    fig=px.scatter(pred_long,x="Actual",y="Predicted",facet_col="Model",facet_col_wrap=2,title="Hold-out test predictions"); mn=min(pred_long.Actual.min(),pred_long.Predicted.min()); mx=max(pred_long.Actual.max(),pred_long.Predicted.max()); fig.add_shape(type="line",x0=mn,x1=mx,y0=mn,y1=mx,line_dash="dash",row="all",col="all"); fig.update_layout(template="plotly_white",height=850); st.plotly_chart(fig,use_container_width=True)
+    fig=px.scatter(pred_long,x="Actual",y="Predicted",facet_col="Model",facet_col_wrap=2,title="Hold-out test predictions"); mn=min(pred_long.Actual.min(),pred_long.Predicted.min()); mx=max(pred_long.Actual.max(),pred_long.Predicted.max()); fig.add_shape(type="line",x0=mn,x1=mx,y0=mn,y1=mx,line_dash="dash",row="all",col="all"); fig.update_layout(template="plotly_white",height=850); plot_with_guidance(fig)
 
 with tabs[5]:
     st.subheader("🔬 Hybrid Analysis")
@@ -523,7 +751,8 @@ with tabs[5]:
         st.write(f"RMSE difference (Linear − Hybrid): **{imp:.6f}**. Positive means lower hybrid error on this test split.")
     if len(oof):
         a,b,c=st.columns(3); a.metric("OOF residual SD",f"{np.std(oof):.4f}"); b.metric("OOF residual mean",f"{np.mean(oof):.4f}"); c.metric("OOF residual MAE",f"{np.mean(np.abs(oof)):.4f}")
-        st.plotly_chart(px.histogram(x=oof,nbins=30,title="Out-of-fold statistical residuals"),use_container_width=True)
+        oof_fig=px.histogram(x=oof,nbins=30,title="Out-of-fold statistical residuals")
+        plot_with_guidance(oof_fig)
     st.markdown("### How to interpret the hybrid")
     st.write("The hybrid is useful only when the residuals from the statistical base model contain predictable, generalisable structure. A lower test error is evidence for incremental value under this validation design; it is not a universal claim about hybrid models.")
 
@@ -543,18 +772,284 @@ with tabs[6]:
         st.markdown("### OLS vs predictive evaluation"); st.write(f"Full-data OLS uses {len(y):,} usable observations for inference. Predictive evaluation fits models on {len(ytr):,} training observations and evaluates them on {len(yte):,} untouched test observations. Different R² values are therefore expected.")
 
 with tabs[7]:
-    st.subheader("💡 Results Interpretation")
-    best_test=comparison.loc[comparison.RMSE.idxmin()]; best_cv=comparison.loc[comparison["CV RMSE"].idxmin()]
-    st.markdown("### Predictive results"); st.write(f"The current test split reports the lowest RMSE for **{best_test.Model}** at **{best_test.RMSE:.4f}**. The lowest mean cross-validation RMSE is reported for **{best_cv.Model}** at **{best_cv['CV RMSE']:.4f}**. These are descriptive results for the current dataset and validation design, not universal algorithm rankings.")
-    st.markdown("### Statistical inference");
-    if osm is not None: st.write(f"The full-data OLS model has R² **{osm.rsquared:.4f}** and adjusted R² **{osm.rsquared_adj:.4f}**. Coefficient p-values describe evidence against zero conditional effects under the model assumptions; they do not establish causality or superior predictive performance.")
-    st.markdown("### Diagnostics");
-    if not vif.empty:
-        high=vif[vif.VIF>=5]["Variable"].tolist(); st.write("Potential multicollinearity is flagged for: **"+", ".join(high)+"**." if high else "No predictor has VIF ≥ 5 in this specification.")
-    st.markdown("### Research conclusion"); st.write(f"The analysis compares statistical, regularised, AI and hybrid models. The selected model under **{criterion}** is **{selected_model}**. Conclusions should report full-data inference, cross-validation, untouched-test performance, hybrid incremental value and diagnostics separately.")
+    st.subheader("💡 Results Interpretation — separate reading of every result")
+    st.caption("This page translates the numerical results into plain language while keeping the statistical meaning and research limitations explicit. Each section answers a different question.")
+
+    interpretation_tabs=st.tabs([
+        "📊 Model comparison", "📏 Error metrics", "📐 OLS coefficients", "🔗 Hybrid result", "🧪 Diagnostics", "📈 Graph meaning", "📝 Research summary"
+    ])
+
+    # 1. Model comparison
+    with interpretation_tabs[0]:
+        st.markdown("### What does the model comparison tell me?")
+        st.write("The comparison table answers a predictive question: how well did each model perform under the same training, cross-validation and test design?")
+        st.info(f"The current model-selection rule is **{criterion}**. The displayed selected model is **{selected_model}**. This is a result for this dataset and validation design, not a universal ranking of algorithms.")
+        for _,r in comparison.iterrows():
+            msg=[]
+            msg.append(f"**{r['Model']}**: test RMSE = **{r['RMSE']:.4f}**, test MAE = **{r['MAE']:.4f}**, test R² = **{r['R²']:.4f}**.")
+            if np.isfinite(r.get('CV RMSE',np.nan)):
+                msg.append(f"Mean CV RMSE = **{r['CV RMSE']:.4f}**.")
+            gap=float(r.get('Generalization Gap R²',np.nan))
+            if np.isfinite(gap):
+                if gap > .15:
+                    msg.append("The training-to-test R² gap is relatively large, so possible overfitting deserves attention.")
+                elif gap > .05:
+                    msg.append("There is some training-to-test decline; inspect cross-validation and model complexity.")
+                else:
+                    msg.append("The training-to-test R² gap is relatively small in this split.")
+            st.markdown("\n".join(msg))
+            st.divider()
+        st.markdown("### How to read the comparison")
+        st.write("Lower RMSE and MAE mean smaller prediction errors. Higher R² means the model explains more variation relative to a mean baseline on that evaluation sample. These metrics measure different aspects of performance, so a model should not be judged from one number alone.")
+        st.warning("⚠️ Avoid declaring a model universally best from one dataset, one split or one metric. Consider cross-validation variability, test performance, model purpose, interpretability and diagnostics together.")
+
+    # 2. Error metrics
+    with interpretation_tabs[1]:
+        st.markdown("### RMSE")
+        st.latex(r"RMSE=\sqrt{\frac{1}{n}\sum_i(Y_i-\hat Y_i)^2}")
+        st.write("RMSE is expressed in the same units as the outcome. Because errors are squared before averaging, large prediction errors receive more weight.")
+        st.markdown("**Plain-language reading:** an RMSE of 5 means the model's error scale is about 5 outcome-units, with larger errors penalised more heavily.")
+        st.markdown("### MAE")
+        st.latex(r"MAE=\frac{1}{n}\sum_i|Y_i-\hat Y_i|")
+        st.write("MAE is the average absolute prediction error and is also expressed in the units of Y. It is easier to interpret directly and is less sensitive to extreme errors than RMSE.")
+        st.markdown("### R²")
+        st.latex(r"R^2=1-\frac{SSE}{SST}")
+        st.write("R² compares the model with a mean-prediction reference on the same evaluation sample. It is not a percentage accuracy measure.")
+        st.warning("⚠️ Test-set R² can be negative when predictions are worse than the mean baseline. Full-data R² is an in-sample quantity and should not be presented as evidence of generalisation.")
+        st.markdown("### What to report together")
+        st.write("Report RMSE, MAE and R² together, then state explicitly whether each number is training, cross-validation or untouched-test performance.")
+
+    # 3. OLS coefficient interpretation
+    with interpretation_tabs[2]:
+        st.markdown("### How to interpret the OLS coefficient table")
+        st.write("For a numeric predictor, the coefficient is the estimated change in the conditional mean of Y for a one-unit increase in that predictor, holding the other included predictors constant, under the fitted model.")
+        if not coef.empty:
+            ctab=coef.copy()
+            def p_text(p):
+                if not np.isfinite(p): return "Not available"
+                if p < .001: return "Very strong evidence against coefficient = 0"
+                if p < .01: return "Strong evidence against coefficient = 0"
+                if p < .05: return "Evidence against coefficient = 0 at the 5% level"
+                return "Insufficient evidence against coefficient = 0 at the 5% level"
+            ctab["Plain-language p-value reading"]=ctab["p-value"].map(p_text)
+            st.dataframe(ctab,use_container_width=True,hide_index=True)
+            for _,r in coef.iterrows():
+                v=str(r['Variable']); b=float(r['Coefficient']); p=float(r['p-value'])
+                if v.lower() in {'const','intercept'}:
+                    continue
+                direction='increases' if b>0 else 'decreases' if b<0 else 'has an estimated change near zero for'
+                st.markdown(f"**{v}:** a one-unit increase is associated with an estimated **{abs(b):.4f}-unit {direction}** in Y, conditional on the other included predictors. p = **{p:.4g}**. This is an association conditional on the model; it is not automatically a causal effect.")
+        else:
+            st.info("OLS coefficients are not available for this specification.")
+        st.warning("⚠️ A small p-value does not prove causality, practical importance or superior prediction. Confidence intervals, effect size, diagnostics and study design also matter.")
+
+    # 4. Hybrid interpretation
+    with interpretation_tabs[3]:
+        st.markdown("### Does the AI residual correction add predictive value?")
+        if "Linear Regression" in comparison.Model.values and "Linear + AI Residual Hybrid" in comparison.Model.values:
+            lin=comparison.loc[comparison.Model=="Linear Regression"].iloc[0]
+            hyb=comparison.loc[comparison.Model=="Linear + AI Residual Hybrid"].iloc[0]
+            rmse_change=float(lin['RMSE']-hyb['RMSE']); mae_change=float(lin['MAE']-hyb['MAE']); r2_change=float(hyb['R²']-lin['R²'])
+            st.metric("Change in test RMSE (Linear − Hybrid)",f"{rmse_change:.4f}")
+            a,b=st.columns(2); a.metric("Change in test MAE",f"{mae_change:.4f}"); b.metric("Change in test R²",f"{r2_change:.4f}")
+            if rmse_change>0:
+                st.success("On this test split, the hybrid has a lower RMSE than the plain linear model. This is evidence of incremental predictive value under this validation design.")
+            elif rmse_change<0:
+                st.warning("On this test split, the hybrid has a higher RMSE than the plain linear model. The AI correction did not improve this metric under this validation design.")
+            else:
+                st.info("The hybrid and linear model have the same test RMSE to the displayed precision.")
+            st.write("The research question is whether the residuals contain predictable systematic structure beyond the statistical base model. Out-of-fold residual construction is important because training on in-sample residuals can create an overly optimistic correction.")
+        else:
+            st.info("Both Linear Regression and the hybrid result are required for this comparison.")
+
+    # 5. Diagnostics
+    with interpretation_tabs[4]:
+        st.markdown("### Multicollinearity")
+        if not vif.empty:
+            for _,r in vif.iterrows():
+                level=str(r['Interpretation']); st.write(f"**{r['Variable']}** — VIF = **{float(r['VIF']):.3f}** — {level}.")
+            st.caption("VIF is mainly about coefficient instability and standard errors. It does not by itself determine predictive performance.")
+        else:
+            st.info("VIF requires at least two usable predictor columns.")
+        st.markdown("### Breusch–Pagan")
+        if np.isfinite(bp_p):
+            if bp_p < .05:
+                st.warning(f"The Breusch–Pagan p-value is {bp_p:.4g}. This can indicate evidence of non-constant error variance under the test's assumptions.")
+            else:
+                st.info(f"The Breusch–Pagan p-value is {bp_p:.4g}. The test does not provide evidence of heteroscedasticity at the 5% level under its assumptions.")
+        else:
+            st.info("Breusch–Pagan diagnostics were not available.")
+        st.markdown("### Training vs test performance")
+        st.write("A material training-to-test decline can indicate overfitting, but the size of the gap depends on sample size, noise, model flexibility and the split. Use cross-validation as an additional stability check.")
+
+    # 6. Graph interpretation guide
+    with interpretation_tabs[5]:
+        st.markdown("### How to interpret the app's main graphs")
+        graph_guide={
+            "Actual vs predicted — points and line":"Actual observations are points; predicted values are the line in test-observation order. The line is not a fitted trendline. Compare local gaps between the point and line as prediction errors.",
+            "Actual vs predicted — identity plot":"Each point is (Actual, Predicted). The diagonal 1:1 line represents perfect prediction. Points farther from the diagonal have larger errors.",
+            "Residuals vs predicted":"Residual = Actual − Predicted. A roughly structureless cloud around zero is generally desirable. Curvature suggests possible nonlinear structure; a funnel can suggest changing error variance; clusters can indicate groups or omitted variables.",
+            "Residual distribution":"Shows the distribution of prediction errors. Centre near zero suggests limited average signed bias; a wide distribution means less precise predictions. Skew or extreme tails deserve investigation.",
+            "Correlation heatmap":"Shows pairwise linear association among numeric variables. Strong predictor-predictor correlation may raise multicollinearity concerns. Correlation alone does not establish causation.",
+            "Feature importance":"Shows model-specific predictive importance in tree ensembles. It is not a coefficient and should not be read as causal effect size.",
+        }
+        for title,desc in graph_guide.items():
+            with st.expander(title):
+                st.write(desc)
+                st.warning("Use the graph together with the numerical table, validation design and subject-matter context; do not infer causality from the visual pattern alone.")
+
+    # 7. Research summary
+    with interpretation_tabs[6]:
+        st.markdown("### Research-level summary")
+        st.write(f"The analysis compares interpretable statistical models, regularised statistical models, flexible AI models and a residual hybrid under the selected validation design. The current selection criterion is **{criterion}**, and the resulting selected model is **{selected_model}** for this dataset and design.")
+        if osm is not None:
+            st.write(f"For full-data OLS inference, R² = **{osm.rsquared:.4f}**, adjusted R² = **{osm.rsquared_adj:.4f}**, F = **{osm.fvalue:.3f}**, model p = **{osm.f_pvalue:.4g}**. These are inferential results under the specified OLS model and assumptions, not out-of-sample predictive scores.")
+        st.write("A defensible research report should state: data and preprocessing, variable specification, model equations, hyperparameters, cross-validation design, untouched-test results, diagnostics, hybrid incremental value, uncertainty and limitations.")
+        st.warning("⚠️ The app supports transparent evidence synthesis. It does not establish causality or guarantee that a model will perform similarly in a new population, time period or measurement system.")
 
 with tabs[8]:
+    st.subheader("⚠️ Model Limitations & When to Be Careful")
+    st.caption("Use this page as a pre-publication checklist. Every regression method has conditions under which its estimates or predictions can become unreliable.")
+
+    limitation_tabs=st.tabs(["📐 Statistical models","🤖 AI models","🔗 Hybrid model","🧰 Common regression warnings"])
+
+    statistical_limits={
+        "Linear Regression":(
+            "Assumes the conditional mean is adequately represented by a linear/additive structure for the variables in the model.",
+            [
+                "Omitted-variable bias or incorrect functional form can distort coefficients.",
+                "Multicollinearity can make coefficients unstable and standard errors large.",
+                "Heteroscedasticity affects conventional standard errors and inference.",
+                "Influential observations can materially change the fitted equation.",
+                "Inference can be misleading when the sampling/design assumptions do not match the research setting.",
+                "Extrapolation beyond the predictor range can be unreliable."
+            ],
+            "Check residual plots, VIF, influential observations, functional form and the study design before interpreting coefficients."
+        ),
+        "Polynomial Regression":(
+            "Polynomial terms can represent curvature, but the chosen degree is a modelling decision rather than a fact about nature.",
+            [
+                "Higher degrees can overfit, especially with small samples.",
+                "Polynomial terms can become strongly correlated, affecting coefficient stability.",
+                "Higher-order coefficients are difficult to interpret individually.",
+                "Extrapolation can become extreme and unrealistic outside the observed range.",
+                "Degree selection should be validated rather than chosen only because training fit improved."
+            ],
+            "Inspect the fitted curve on the observed range and compare cross-validation/test performance across reasonable degrees."
+        ),
+        "Ridge Regression":(
+            "Ridge deliberately introduces bias by shrinking coefficients in exchange for potentially lower variance and greater stability.",
+            [
+                "The penalty strength must be chosen appropriately.",
+                "Predictors should be scaled consistently because the penalty depends on coefficient size.",
+                "Ridge usually retains all predictors rather than producing sparse variable selection.",
+                "Regularised coefficients should not be interpreted with ordinary OLS p-values without specialised inference methods.",
+                "A lower training error is not the purpose; the trade-off is improved expected generalisation."
+            ],
+            "Tune the regularisation strength with cross-validation and report the chosen value."
+        ),
+        "Lasso Regression":(
+            "Lasso performs coefficient shrinkage and can set coefficients exactly to zero, making it useful for sparse modelling.",
+            [
+                "Variable selection can be unstable when predictors are highly correlated.",
+                "Selected coefficients are biased toward zero by the penalty.",
+                "The regularisation strength strongly affects which variables remain active.",
+                "Conventional OLS p-values are not directly applicable to selected Lasso coefficients.",
+                "Scaling and preprocessing affect the penalty and therefore the selected model."
+            ],
+            "Report the tuning method, the number of non-zero coefficients and whether selection is stable across resamples."
+        ),
+        "Elastic Net":(
+            "Elastic Net combines L1 selection with L2 shrinkage and therefore depends on two tuning choices: overall strength and the L1/L2 balance.",
+            [
+                "Poor tuning can either over-shrink or under-regularise the model.",
+                "The interpretation of individual coefficients depends on correlated predictors and the selected penalty mixture.",
+                "Conventional OLS p-values are not directly transferable.",
+                "Scaling is important because penalties operate on coefficient magnitudes.",
+                "Different tuning choices can select different variables."
+            ],
+            "Use nested or appropriately separated cross-validation for research-grade hyperparameter selection when feasible."
+        )
+    }
+    with limitation_tabs[0]:
+        stat_model=st.selectbox("Choose statistical model",list(statistical_limits),key="limit_stat_model")
+        idea,items,check=statistical_limits[stat_model]
+        st.markdown(f"### {stat_model}")
+        st.write(idea)
+        st.markdown("**Main limitations / cautions**")
+        for item in items: st.markdown(f"- {item}")
+        st.success(f"✅ Recommended check: {check}")
+
+    ai_limits={
+        "Random Forest":(
+            "Random Forest can capture nonlinearities and interactions with little functional-form specification, but its predictions are ensemble outputs rather than a simple interpretable equation.",
+            [
+                "Interpretability is lower than for a conventional linear model.",
+                "Tree-based importance measures can be distorted by correlated predictors or variable characteristics.",
+                "Predictions are generally poor for extrapolation outside the training range.",
+                "Small datasets may not provide enough diverse observations for stable tree ensembles.",
+                "Hyperparameters such as tree count, depth and minimum leaf size affect bias and variance."
+            ],
+            "Compare cross-validation and test results, inspect feature importance cautiously, and avoid causal interpretation of importance."
+        ),
+        "Gradient Boosting":(
+            "Gradient Boosting builds an additive sequence of trees and can approximate complex nonlinear patterns, but its sequential fitting makes tuning important.",
+            [
+                "Too many trees, excessive depth or an overly large learning rate can overfit.",
+                "Performance can be sensitive to hyperparameter choices.",
+                "It is less transparent than a coefficient-based statistical model.",
+                "Feature importance is not a causal effect and can be unstable with correlated predictors.",
+                "As with other tree methods, extrapolation beyond the training range is limited."
+            ],
+            "Use cross-validation for hyperparameter choices, compare train/test gaps and inspect residual patterns."
+        )
+    }
+    with limitation_tabs[1]:
+        ai_model=st.selectbox("Choose AI model",list(ai_limits),key="limit_ai_model")
+        idea,items,check=ai_limits[ai_model]
+        st.markdown(f"### {ai_model}")
+        st.write(idea)
+        st.markdown("**Main limitations / cautions**")
+        for item in items: st.markdown(f"- {item}")
+        st.success(f"✅ Recommended check: {check}")
+
+    with limitation_tabs[2]:
+        st.markdown("### Linear + AI Residual Hybrid")
+        st.write("The hybrid adds an AI correction to a statistical base model. Its validity depends strongly on how residuals are generated and validated.")
+        hybrid_limitations=[
+            "Residual leakage can create overly optimistic results if in-sample residuals are used carelessly.",
+            "The hybrid can add complexity without improving out-of-sample performance.",
+            "If the base statistical model is badly misspecified, the residual learner may compensate in opaque ways rather than solving the underlying modelling problem.",
+            "If residuals are mostly irreducible noise, an AI residual model can overfit.",
+            "Uncertainty estimation is more complicated than for a single OLS model.",
+            "The hybrid result is conditional on the chosen base learner, residual learner and validation design."
+        ]
+        for item in hybrid_limitations: st.markdown(f"- {item}")
+        st.success("✅ Recommended research check: use out-of-fold residuals, keep the final test set untouched, compare against the base model under the same test design, and report the incremental change in RMSE/MAE/R².")
+
+    with limitation_tabs[3]:
+        st.markdown("### Common warnings before interpreting any regression")
+        common=[
+            ("Data leakage","Do not use information that would not be available at prediction time, including outcome-derived variables."),
+            ("Small sample size","Small samples make coefficients, p-values, cross-validation and flexible AI models less stable."),
+            ("Missing data","Deleting observations without considering why data are missing can change the target population and introduce bias."),
+            ("Outliers and influential observations","A few unusual observations can strongly affect OLS coefficients and error metrics."),
+            ("Multicollinearity","Highly correlated predictors can make coefficient interpretation unstable even when overall prediction remains acceptable."),
+            ("Causality","Regression association is not automatically a causal effect; causal interpretation requires an appropriate design and assumptions."),
+            ("Extrapolation","A model validated inside the observed predictor range may behave poorly outside that range."),
+            ("Distribution shift","Good test performance does not guarantee similar performance after the population, measurement process or policy environment changes."),
+            ("Single split dependence","A single train/test split is only one random partition; use cross-validation or repeated resampling to assess stability."),
+            ("Metric dependence","Different metrics can favour different models. Report the metric that matches the research objective and show the alternatives."),
+        ]
+        for title,desc in common:
+            st.markdown(f"**{title}:** {desc}")
+
+with tabs[9]:
     st.subheader("🎨 Advanced Chart Studio")
+    st.markdown("### 🧭 How to read every graph in this app")
+    st.write("Start with the title and axes, identify what one point/bar/line represents, note the units, then ask: What pattern is visible? How variable is it? Are there unusual observations? Is the graph from training, cross-validation or an untouched test set?")
+    st.caption("Every graph is followed by an expandable plain-language interpretation, a warning about common misreading, and a suggested next check.")
+
     st.caption("Use this workspace for research-quality exploratory plots, regression diagnostics, model comparison visuals and publication-ready inspection. Colour controls are provided where useful.")
     chart_tabs=st.tabs(["🔎 Advanced Data Explorer","📉 Model Diagnostics","📊 Research Comparison"])
 
@@ -643,7 +1138,7 @@ with tabs[8]:
 
         if fig is not None:
             fig.update_layout(template="plotly_white",height=620,margin=dict(l=30,r=30,t=80,b=50),hovermode="closest")
-            st.plotly_chart(fig,use_container_width=True)
+            plot_with_guidance(fig)
             st.caption("Exploratory plots describe patterns in the observed data. They do not by themselves establish causation.")
 
     with chart_tabs[1]:
@@ -728,7 +1223,7 @@ with tabs[8]:
 
         if fig is not None:
             fig.update_layout(template="plotly_white",height=640,margin=dict(l=30,r=30,t=80,b=50),hovermode="closest")
-            st.plotly_chart(fig,use_container_width=True)
+            plot_with_guidance(fig)
 
     with chart_tabs[2]:
         st.markdown("### Research comparison plots")
@@ -774,10 +1269,10 @@ with tabs[8]:
 
         if fig is not None:
             fig.update_layout(template="plotly_white",height=640,margin=dict(l=30,r=30,t=80,b=50),hovermode="closest")
-            st.plotly_chart(fig,use_container_width=True)
+            plot_with_guidance(fig)
             st.caption("Comparison plots are descriptive for the current dataset and validation design. Use the numerical tables alongside the visuals.")
 
-with tabs[9]:
+with tabs[10]:
     st.subheader("📄 Report & Export")
     pred_table=Xte.reset_index(drop=True).copy(); pred_table.insert(0,"Actual",yte.reset_index(drop=True))
     for m,p in preds.items(): pred_table[f"Predicted — {m}"]=p
@@ -789,4 +1284,4 @@ with tabs[9]:
         df.to_excel(w,"Data",index=False); full_comparison.to_excel(w,"Full Data Results",index=False); comparison.to_excel(w,"Model Comparison",index=False); pred_table.to_excel(w,"Test Predictions",index=False); coef.to_excel(w,"OLS Coefficients",index=False); anova.to_excel(w,"ANOVA",index=False); vif.to_excel(w,"VIF",index=False)
     st.download_button("📘 Complete Excel report",excel.getvalue(),"statistical_ai_complete_report.xlsx","application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
-st.divider(); st.caption("StatAI v14 • Statistical–AI Hybrid Modelling Platform • Research and educational use")
+st.divider(); st.caption("StatAI v16 • Statistical–AI Hybrid Modelling Platform • Research and educational use")
