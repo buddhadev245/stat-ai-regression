@@ -390,6 +390,11 @@ with tabs[3]:
         key="theory_topic_v17"
     )
 
+    # Keep this defined for the standalone workflow topic so the later topic dispatch
+    # never references an undefined variable. Model-specific details are populated below
+    # only when a model topic is selected.
+    model_details = {}
+
     def theory_header(title, purpose, formula=None):
         st.markdown(f"## {title}")
         st.info(f"**In simple words:** {purpose}")
@@ -413,8 +418,35 @@ with tabs[3]:
             ("11. Statistical inference","Use OLS coefficient estimates, standard errors, confidence intervals, p-values, ANOVA, VIF and heteroscedasticity diagnostics when appropriate."),
             ("12. Interpret and report","Explain what the results support, what they do not support, uncertainty, limitations and practical warnings."),
         ]
+        # Horizontal research flowchart: fixed-width cards + arrows inside a scrollable viewport.
+        flow_html=['<div class="wf-viewport"><div class="wf-track">']
+        for i,(title,desc) in enumerate(workflow_details):
+            num,_,short_title=title.partition('. ')
+            flow_html.append(
+                f'<div class="wf-card"><div class="wf-num">Step {num}</div>'
+                f'<div class="wf-title">{short_title}</div><div class="wf-desc">{desc}</div></div>'
+            )
+            if i < len(workflow_details)-1:
+                flow_html.append('<div class="wf-arrow">→</div>')
+        flow_html.append('</div></div>')
+        st.markdown(''.join(flow_html), unsafe_allow_html=True)
+        st.caption("↔ Scroll horizontally to follow the complete research workflow from study definition to the final report.")
+
+        st.markdown("### Detailed explanation of each step")
         for title,desc in workflow_details:
-            with st.expander(title,expanded=False): st.write(desc)
+            with st.expander(title,expanded=False):
+                st.write(desc)
+                if title.startswith("1."):
+                    st.markdown("**Research aim:** Decide whether the analysis is primarily inferential, predictive, or both. This determines how the results should be interpreted.")
+                elif title.startswith("5."):
+                    st.markdown("**Key rule:** The final test data should remain untouched during model fitting and model-selection decisions.")
+                elif title.startswith("9."):
+                    st.markdown("**Why it matters:** Cross-validation gives a more stable estimate of performance than relying on one training fit alone.")
+                elif title.startswith("11."):
+                    st.markdown("**Important:** Statistical inference and predictive performance answer different questions and should be reported separately.")
+                elif title.startswith("12."):
+                    st.markdown("**Research reporting:** State the data, preprocessing, model specification, validation design, results, diagnostics, limitations and practical implications so the analysis can be reproduced.")
+
         st.markdown("### How one observation moves through the app")
         st.markdown("**Data row → preprocessing → model fitting → prediction → error = Actual − Predicted → validation → interpretation**")
         st.markdown("### What the user should remember")
@@ -591,7 +623,7 @@ with tabs[3]:
         st.write("The untouched test set is reserved for the final out-of-sample evaluation after fitting and model-selection decisions. This is the main internal estimate of generalisation in this app.")
         st.markdown("### Inference versus prediction")
         st.write("OLS coefficients, standard errors, confidence intervals and p-values address inferential questions under model assumptions. Test RMSE, MAE and R² address prediction. One model can be useful for inference while another gives lower prediction error.")
-    else:
+    elif theory_topic in model_details:
         info=model_details[theory_topic]
         theory_header(theory_topic,info["purpose"],info["model"])
         st.markdown("### Mathematical estimation / optimisation")
