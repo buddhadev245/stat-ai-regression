@@ -240,7 +240,19 @@ try:
     model_df[y_col]=pd.to_numeric(model_df[y_col],errors="coerce")
     model_df=model_df.replace([np.inf,-np.inf],np.nan).dropna(subset=[y_col]).reset_index(drop=True)
     X=model_df[x_cols].copy(); y=model_df[y_col].copy()
-    if len(y)<max(30,len(x_cols)+10): raise ValueError("Too few usable observations for the selected specification.")
+    # Small datasets are allowed to run. They receive a clear warning rather than being blocked.
+    small_data_threshold = max(30, 5 * (len(x_cols) + 1))
+    if len(y) < small_data_threshold:
+        st.warning(
+            f"⚠️ Small sample warning: only {len(y):,} usable observations are available. "
+            f"The analysis will still run, but estimates, cross-validation results, AI models, "
+            f"and statistical inference may be unstable. Interpret the results cautiously and "
+            f"consider collecting more observations."
+        )
+    if len(y) < 4:
+        raise ValueError(
+            "At least 4 usable observations are required to create a train/test split and run the analysis."
+        )
     Xtr,Xte,ytr,yte=train_test_split(X,y,test_size=test_size,random_state=seed)
     specs=model_specs(X,rf_trees,gb_trees,degree,seed)
     preds={}; train_preds={}; rows=[]; cvrows=[]; failures=[]
@@ -248,7 +260,10 @@ try:
         try:
             fit=make_clone(est); fit.fit(Xtr,ytr); pt=fit.predict(Xte); ptr=fit.predict(Xtr); preds[name]=pt; train_preds[name]=ptr
             mt=metrics(yte,pt); mtr=metrics(ytr,ptr); vals=[]
-            kf=KFold(n_splits=min(folds,len(ytr)),shuffle=True,random_state=seed)
+            effective_folds = min(folds, len(ytr))
+            if effective_folds < 2:
+                raise ValueError("At least 2 training observations are required for cross-validation.")
+            kf=KFold(n_splits=effective_folds,shuffle=True,random_state=seed)
             for ti,vi in kf.split(Xtr):
                 fm=make_clone(est); fm.fit(Xtr.iloc[ti],ytr.iloc[ti]); vals.append(metrics(ytr.iloc[vi],fm.predict(Xtr.iloc[vi])))
             rows.append({"Model":name,"Type":"AI" if name in ["Random Forest","Gradient Boosting"] else "Statistical","Train RMSE":mtr["RMSE"],"Train MAE":mtr["MAE"],"Train R²":mtr["R²"],"RMSE":mt["RMSE"],"MAE":mt["MAE"],"R²":mt["R²"]})
