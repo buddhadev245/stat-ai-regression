@@ -364,7 +364,7 @@ if run_clicked:
     st.session_state["analysis_x"] = list(x_cols)
 
 # Show tabs after the run control.
-tabs=st.tabs(["🏠 Overview","📁 Data & EDA","📊 Full Data Results","📚 Theory & How It Works","📈 Predictive Results","🩺 Diagnostics & Inference","💡 Results Interpretation & Limitations","🎨 Chart Studio","📄 Report & Export"])
+tabs=st.tabs(["🏠 Overview","📁 Data & EDA","🎨 Chart Studio","📊 Full Data Results","📚 Theory & How It Works","📈 Predictive Results","🩺 Diagnostics & Inference","💡 Results Interpretation & Limitations","📄 Report & Export"])
 
 with tabs[0]:
     st.markdown('<div class="card"><h2>Analysis overview</h2><p>Upload data, inspect quality, choose the outcome and predictors, run the models, compare full-data fit with out-of-sample prediction, examine the residual hybrid, check diagnostics, and interpret the evidence.</p></div>',unsafe_allow_html=True)
@@ -383,7 +383,7 @@ with tabs[1]:
         eda_fig=px.imshow(df[num_cols].corr(),text_auto=".2f",aspect="auto",title="Numeric correlation matrix",color_continuous_scale="RdBu_r")
         plot_with_guidance(eda_fig)
 
-with tabs[3]:
+with tabs[4]:
     st.subheader("📚 Regression Theory & How It Works")
     st.caption("A single theory workspace replaces multiple sub-tabs. Select one topic below; each topic gives the research theory, mathematical estimation, step-by-step calculation, how StatAI runs it, interpretation, limitations and learning links.")
 
@@ -662,11 +662,11 @@ with tabs[3]:
 if not st.session_state.get("analysis_ready",False):
     with tabs[0]:
         st.info("Choose Y and X in **Data & EDA**, then click **Run / Refresh complete analysis**. Results tabs will populate after the analysis is run.")
-    with tabs[2]: st.info("Click **🚀 Run / Refresh Complete Analysis** above the tabs.")
-    with tabs[4]: st.info("Click **🚀 Run / Refresh Complete Analysis** above the tabs.")
+    with tabs[3]: st.info("Click **🚀 Run / Refresh Complete Analysis** above the tabs.")
     with tabs[5]: st.info("Click **🚀 Run / Refresh Complete Analysis** above the tabs.")
     with tabs[6]: st.info("Click **🚀 Run / Refresh Complete Analysis** above the tabs.")
-    with tabs[7]: st.info("Click **🚀 Run / Refresh Complete Analysis** above the tabs. Dataset charts remain available in the Chart Studio after the analysis is run.")
+    with tabs[7]: st.info("Click **🚀 Run / Refresh Complete Analysis** above the tabs.")
+    with tabs[2]: st.info("Click **🚀 Run / Refresh Complete Analysis** above the tabs. Dataset charts remain available in the Chart Studio after the analysis is run.")
     with tabs[8]: st.info("Click **🚀 Run / Refresh Complete Analysis** above the tabs.")
     with tabs[9]: st.info("Click **🚀 Run / Refresh Complete Analysis** above the tabs.")
     st.stop()
@@ -770,7 +770,7 @@ if failures:
         for f in failures: st.write(f)
 
 # Full data results
-with tabs[2]:
+with tabs[3]:
     st.subheader("📊 Full Data Results")
     st.caption("These are in-sample results: each model is fitted using all usable observations and evaluated on those same observations. They are not independent test-set estimates.")
     if osm is not None:
@@ -781,7 +781,7 @@ with tabs[2]:
         with st.expander("Full-data OLS coefficients",expanded=True): st.dataframe(coef,use_container_width=True,hide_index=True)
 
 # Predictive results
-with tabs[4]:
+with tabs[5]:
     st.subheader("📈 Predictive Results")
     a,b,c,d=st.columns(4); a.metric("Selected model",selected_model); b.metric("Test RMSE",f"{float(selrow['RMSE']):.4f}"); c.metric("Test MAE",f"{float(selrow['MAE']):.4f}"); d.metric("Test R²",f"{float(selrow['R²']):.4f}")
     st.caption(f"Selection criterion: {criterion}. Training observations: {len(ytr):,}; untouched test observations: {len(yte):,}.")
@@ -804,7 +804,7 @@ with tabs[4]:
         st.write("The hybrid asks whether an AI learner can predict systematic residual structure left after the statistical base model. A lower test error is evidence of incremental predictive value under this validation design, not a universal claim about hybrid models.")
         st.warning("⚠️ The residual learner must use out-of-fold residuals and an untouched test set; otherwise the apparent improvement can be overly optimistic.")
 
-with tabs[5]:
+with tabs[6]:
     st.subheader("🩺 Diagnostics & Statistical Inference")
     if osm is None:
         st.warning("OLS diagnostics could not be calculated for this specification.")
@@ -819,7 +819,7 @@ with tabs[5]:
         st.caption("The Breusch–Pagan test is a diagnostic for non-constant error variance; it is not a complete validity test.")
         st.markdown("### OLS vs predictive evaluation"); st.write(f"Full-data OLS uses {len(y):,} usable observations for inference. Predictive evaluation fits models on {len(ytr):,} training observations and evaluates them on {len(yte):,} untouched test observations. Different R² values are therefore expected.")
 
-with tabs[6]:
+with tabs[7]:
     st.subheader("💡 Results Interpretation & Model Limitations")
     st.caption("Everything is explained on one page so the user does not need to move between several interpretation tabs. Use the section headings and expanders to read only what you need.")
 
@@ -830,15 +830,61 @@ with tabs[6]:
     st.warning("⚠️ These are conditional results for this dataset, variable specification, preprocessing and validation design. They are not universal rankings of regression algorithms.")
 
     st.markdown("### 2. Model-by-model predictive interpretation")
+    st.caption("The same information is shown in one table so the models can be compared without opening separate sections.")
+
+    interpretation_rows=[]
     for _,r in comparison.iterrows():
+        model=str(r["Model"])
+        rmse=float(r["RMSE"])
+        mae=float(r["MAE"])
+        r2=float(r["R²"])
+        cv_rmse=float(r.get("CV RMSE",np.nan))
         gap=float(r.get("Generalization Gap R²",np.nan))
-        with st.expander(str(r["Model"]),expanded=False):
-            st.write(f"**Test RMSE:** {r['RMSE']:.4f} | **Test MAE:** {r['MAE']:.4f} | **Test R²:** {r['R²']:.4f} | **CV RMSE:** {r.get('CV RMSE',np.nan):.4f}")
-            st.write("Lower RMSE/MAE indicate smaller prediction errors. Higher R² indicates better performance relative to the mean baseline on the same evaluation sample.")
-            if np.isfinite(gap):
-                if gap>.15: st.warning("The training-to-test R² gap is relatively large. Investigate possible overfitting, model complexity and validation stability.")
-                elif gap>.05: st.info("There is a noticeable training-to-test decline. Compare this with cross-validation variability and residual diagnostics.")
-                else: st.success("The training-to-test R² gap is comparatively small in this split; still confirm stability with cross-validation.")
+
+        if np.isfinite(gap):
+            if gap>.15:
+                stability="Larger train–test gap; investigate possible overfitting and validate stability."
+            elif gap>.05:
+                stability="Noticeable train–test decline; compare with CV variation and diagnostics."
+            else:
+                stability="Relatively small train–test gap in this split; still confirm with cross-validation."
+        else:
+            stability="Generalisation-gap information unavailable."
+
+        if r2 < 0:
+            r2_text="Test R² is negative; predictions are worse than the mean-baseline reference on this test set."
+        elif r2 < 0.25:
+            r2_text="Test R² is relatively low; the model explains limited variation on this test set."
+        elif r2 < 0.50:
+            r2_text="Test R² shows moderate explanatory/predictive improvement over the mean baseline."
+        else:
+            r2_text="Test R² is comparatively high on this test set; verify that the result is stable across validation folds."
+
+        interpretation_rows.append({
+            "Model": model,
+            "Type": str(r.get("Type","")),
+            "Test RMSE": rmse,
+            "Test MAE": mae,
+            "Test R²": r2,
+            "CV RMSE": cv_rmse,
+            "Generalization Gap R²": gap,
+            "Plain-language interpretation": f"RMSE={rmse:.3f}; MAE={mae:.3f}. {r2_text}",
+            "Stability / warning": stability,
+        })
+
+    interpretation_table=pd.DataFrame(interpretation_rows)
+    st.dataframe(
+        interpretation_table.style.format({
+            "Test RMSE":"{:.4f}",
+            "Test MAE":"{:.4f}",
+            "Test R²":"{:.4f}",
+            "CV RMSE":"{:.4f}",
+            "Generalization Gap R²":"{:.4f}",
+        }),
+        use_container_width=True,
+        hide_index=True,
+    )
+    st.info("Reading the table: lower Test RMSE and Test MAE indicate smaller errors on the same test set. Higher Test R² indicates greater improvement over the mean baseline on that test set. CV RMSE and the generalisation gap help assess stability beyond a single test result.")
 
     st.markdown("### 3. Error metrics in plain language")
     with st.expander("RMSE — what does it tell me?",expanded=False):
@@ -922,7 +968,7 @@ with tabs[6]:
     st.markdown("### 9. Research reporting suggestion")
     st.info("A PhD-level report should state separately: (1) data and preprocessing, (2) statistical inference, (3) cross-validation, (4) untouched-test prediction, (5) hybrid incremental value, (6) diagnostics, and (7) limitations. Avoid reducing the entire analysis to a single 'best model' number.")
 
-with tabs[7]:
+with tabs[2]:
     st.subheader("🎨 Chart Studio — Simple, Clear & Interpreted")
     st.caption("Start with a simple chart. The app explains what the graph describes, what to look for, what can be misleading, and what to check next.")
 
