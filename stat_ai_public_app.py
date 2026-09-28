@@ -349,7 +349,21 @@ excluded_ids=[c for c in available if c not in x_cols and str(c).strip().lower()
 if excluded_ids:
     st.info("ℹ️ Identifier columns excluded from the default predictors: " + ", ".join(excluded_ids))
 
-# Show tabs before analysis so the app never crashes just because a model fails.
+# Central analysis control — placed immediately below Y/X selection.
+st.markdown("### 🚀 Run Analysis")
+st.caption("After selecting Y and X, click the button below to run the complete regression, AI and hybrid analysis. You do not need to run it again when moving between result tabs.")
+run_clicked = st.button(
+    "🚀 Run / Refresh Complete Analysis",
+    type="primary",
+    use_container_width=True,
+    key="run_analysis_main_top"
+)
+if run_clicked:
+    st.session_state["analysis_ready"] = True
+    st.session_state["analysis_y"] = y_col
+    st.session_state["analysis_x"] = list(x_cols)
+
+# Show tabs after the run control.
 tabs=st.tabs(["🏠 Overview","📁 Data & EDA","📊 Full Data Results","📚 Theory & How It Works","📈 Predictive Results","🩺 Diagnostics & Inference","💡 Results Interpretation & Limitations","🎨 Chart Studio","📄 Report & Export"])
 
 with tabs[0]:
@@ -645,25 +659,16 @@ with tabs[3]:
         elif info["source"] in ["Ridge Regression","Lasso Regression","Elastic Net Regression"]:
             st.caption("Regularisation changes coefficient estimation. Do not interpret these coefficients as ordinary OLS estimates or attach ordinary OLS p-values without an appropriate inference method.")
 
-# Central analysis control — shown only on the Data & EDA tab
-with tabs[1]:
-    st.markdown("### 🚀 Run analysis")
-    st.caption("Choose the dependent variable (Y) and independent variables (X) above, then run the analysis. Other tabs only display the resulting analysis; they do not contain another Run button.")
-    run_clicked=st.button("🚀 Run / Refresh complete analysis",type="primary",use_container_width=True,key="run_analysis_main")
-
-if run_clicked:
-    st.session_state["analysis_ready"]=True
-
 if not st.session_state.get("analysis_ready",False):
     with tabs[0]:
         st.info("Choose Y and X in **Data & EDA**, then click **Run / Refresh complete analysis**. Results tabs will populate after the analysis is run.")
-    with tabs[2]: st.info("Run the analysis first from **Data & EDA**.")
-    with tabs[4]: st.info("Run the analysis first from **Data & EDA**.")
-    with tabs[5]: st.info("Run the analysis first from **Data & EDA**.")
-    with tabs[6]: st.info("Run the analysis first from **Data & EDA**.")
-    with tabs[7]: st.info("Run the analysis first from **Data & EDA**. Dataset charts remain available in the Chart Studio after the analysis is run.")
-    with tabs[8]: st.info("Run the analysis first from **Data & EDA**.")
-    with tabs[10]: st.info("Run the analysis first from **Data & EDA**.")
+    with tabs[2]: st.info("Click **🚀 Run / Refresh Complete Analysis** above the tabs.")
+    with tabs[4]: st.info("Click **🚀 Run / Refresh Complete Analysis** above the tabs.")
+    with tabs[5]: st.info("Click **🚀 Run / Refresh Complete Analysis** above the tabs.")
+    with tabs[6]: st.info("Click **🚀 Run / Refresh Complete Analysis** above the tabs.")
+    with tabs[7]: st.info("Click **🚀 Run / Refresh Complete Analysis** above the tabs. Dataset charts remain available in the Chart Studio after the analysis is run.")
+    with tabs[8]: st.info("Click **🚀 Run / Refresh Complete Analysis** above the tabs.")
+    with tabs[9]: st.info("Click **🚀 Run / Refresh Complete Analysis** above the tabs.")
     st.stop()
 
 try:
