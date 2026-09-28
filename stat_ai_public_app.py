@@ -212,8 +212,8 @@ with tabs[3]:
             if i<len(workflow)-1: cards.append('<div class="wf-arrow">→</div>')
         st.markdown('<div class="wf-viewport"><div class="wf-track">'+''.join(cards)+'</div></div><div class="note"><b>Read left → right.</b> The workflow scrolls horizontally instead of shrinking the cards, so the labels do not overlap.</div>',unsafe_allow_html=True)
         st.markdown("### How information moves")
-        for title,desc in workflow:
-            st.markdown(f"**{title}. {desc.split(';')[0]}** — {desc}")
+        for n,title,desc in workflow:
+            st.markdown(f"**{n}. {title}** — {desc}")
     with theory_tabs[1]:
         st.markdown("### Linear Regression"); st.latex(r"Y=\beta_0+\beta_1X_1+\cdots+\beta_pX_p+\varepsilon"); st.write("Least squares chooses coefficients that minimise the sum of squared residuals. The coefficients provide an interpretable conditional relationship under the specified model and assumptions.")
         st.markdown("### Polynomial Regression"); st.write("Polynomial features add powers such as X² and X³ so a linear coefficient model can represent curvature. Higher degree increases flexibility and can increase overfitting risk.")
