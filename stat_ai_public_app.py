@@ -165,12 +165,7 @@ if not numeric:
 st.success(f"Loaded **{len(df):,} rows × {len(df.columns):,} columns**")
 
 # Main variable-selection panel
-available=[c for c in df.columns if c!=y_col]
-non_id=[c for c in available if str(c).strip().lower().replace(" ","_") not in ID_NAMES]
-default=[c for c in non_id if c in numeric][:5]
-if not default:
-    default=[c for c in available if c in numeric][:5]
-
+# Y must be selected before variables depending on y_col are calculated.
 st.markdown("### 🎯 Choose your regression variables")
 st.caption("Select the dependent variable (Y) and one or more independent variables (X). The X selector accepts both numeric and categorical predictors. Common identifier columns are excluded from the default selection but remain available if you intentionally want to use one.")
 sel1, sel2 = st.columns([1, 2], gap="large")
