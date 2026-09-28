@@ -207,33 +207,173 @@ with tabs[1]:
         st.plotly_chart(px.imshow(df[num_cols].corr(),text_auto=".2f",aspect="auto",title="Numeric correlation matrix",color_continuous_scale="RdBu_r"),use_container_width=True)
 
 with tabs[3]:
-    st.subheader("📚 Theory, workflow & model flowcharts")
-    theory_tabs=st.tabs(["🧭 Overall workflow","📐 Statistical models","🤖 AI models","🔗 Hybrid model","📊 Metrics & validation"])
+    st.subheader("📚 Regression Theory & How It Works")
+    st.caption("This research-oriented guide explains what each model estimates, the mathematics behind it, how this application runs it, what to look for in the output, and the main limitations.")
+
+    theory_tabs=st.tabs(["🧭 Complete process","📐 Regression models","🤖 AI models","🔗 Hybrid regression","📊 Validation & inference"])
+
     with theory_tabs[0]:
+        st.markdown("### 1. How the complete regression process works")
         workflow=[
-            ("1","Data","Upload data and define the research outcome and predictors."),("2","Quality Check","Inspect missing values, types, identifiers and usable observations."),("3","EDA","Study distributions, correlations, outliers and possible nonlinear patterns."),("4","Train / Test","Reserve a final test set before model comparison."),("5","Statistical Models","Estimate interpretable linear and regularised relationships."),("6","AI Models","Learn nonlinearities and interactions with tree ensembles."),("7","Hybrid","Learn predictable residual structure and add it to the statistical base prediction."),("8","Cross-Validation","Repeat training/validation folds within the training data to estimate generalisation."),("9","Final Test","Evaluate on observations not used for fitting or model selection."),("10","Diagnostics","Check multicollinearity, residual behaviour and train-test gaps."),("11","Interpretation","Separate predictive evidence, statistical inference and hybrid evidence."),("12","Research Report","Record methods, results, limitations and reproducibility information.")]
+            ("1","Define the research question","Choose what you want to explain or predict. Select Y as the dependent/outcome variable and X variables as predictors."),
+            ("2","Prepare the data","Check variable types, missing values, invalid values, identifiers, duplicates and the usable sample."),
+            ("3","Explore the data","Inspect distributions, relationships, outliers, correlation and possible nonlinear patterns before fitting models."),
+            ("4","Create the modelling sample","The app keeps the selected Y and X variables, handles numeric/categorical predictors through preprocessing, and removes unusable outcome rows."),
+            ("5","Split train and test data","The training set is used to fit models. The untouched test set is kept for final out-of-sample evaluation."),
+            ("6","Fit statistical models","Linear, polynomial, Ridge, Lasso and Elastic Net provide increasingly flexible or regularised statistical representations."),
+            ("7","Fit AI models","Random Forest and Gradient Boosting learn nonlinearities and interactions from the predictors."),
+            ("8","Build the hybrid","The statistical base model is fitted with out-of-fold predictions; its out-of-fold residuals are learned by an AI residual model; the correction is added to the statistical prediction."),
+            ("9","Cross-validate","The training data are repeatedly divided into folds to estimate how models behave on unseen training-fold observations."),
+            ("10","Evaluate the final test set","RMSE, MAE and R² are calculated on observations not used to fit the final models."),
+            ("11","Check inference and diagnostics","OLS coefficients, standard errors, p-values, confidence intervals, ANOVA, VIF and Breusch–Pagan diagnostics are examined separately from predictive accuracy."),
+            ("12","Interpret and report","Explain what the data support, distinguish inference from prediction, report uncertainty/limitations, and record the modelling choices for reproducibility."),
+        ]
         cards=[]
         for i,(n,t,d) in enumerate(workflow):
             cards.append(f'<div class="wf-card"><div class="wf-num">Step {n}</div><div class="wf-title">{t}</div><div class="wf-desc">{d}</div></div>')
             if i<len(workflow)-1: cards.append('<div class="wf-arrow">→</div>')
-        st.markdown('<div class="wf-viewport"><div class="wf-track">'+''.join(cards)+'</div></div><div class="note"><b>Read left → right.</b> The workflow scrolls horizontally instead of shrinking the cards, so the labels do not overlap.</div>',unsafe_allow_html=True)
-        st.markdown("### How information moves")
-        for n,title,desc in workflow:
-            st.markdown(f"**{n}. {title}** — {desc}")
+        st.markdown('<div class="wf-viewport"><div class="wf-track">'+''.join(cards)+'</div></div><div class="note"><b>Read left → right.</b> Scroll horizontally through the complete analysis pipeline.</div>',unsafe_allow_html=True)
+
+        st.markdown("### 2. What the app actually does when you press Run")
+        run_steps=[
+            ("A","Select Y and X","The chosen variables define the regression problem."),
+            ("B","Preprocess X","Numeric predictors are imputed/scaled where required; categorical predictors are imputed and one-hot encoded."),
+            ("C","Fit models on training data","Each statistical/AI estimator is fit independently using the same training observations."),
+            ("D","Generate predictions","Each fitted model predicts the untouched test observations."),
+            ("E","Calculate metrics","The app calculates RMSE, MAE and R² and also performs cross-validation within the training data."),
+            ("F","Fit the full-data models","A second set of models is fit to all usable observations for descriptive in-sample comparison; these results are clearly labelled as full-data/in-sample."),
+            ("G","Run OLS inference","The selected predictors are represented in an OLS design matrix so coefficient inference and diagnostics can be reported separately."),
+            ("H","Store outputs","The tabs display the same completed analysis rather than starting a separate run."),
+        ]
+        for n,t,d in run_steps:
+            st.markdown(f'<div class="card"><b>{n}. {t}</b><br><span class="muted">{d}</span></div>',unsafe_allow_html=True)
+
     with theory_tabs[1]:
-        st.markdown("### Linear Regression"); st.latex(r"Y=\beta_0+\beta_1X_1+\cdots+\beta_pX_p+\varepsilon"); st.write("Least squares chooses coefficients that minimise the sum of squared residuals. The coefficients provide an interpretable conditional relationship under the specified model and assumptions.")
-        st.markdown("### Polynomial Regression"); st.write("Polynomial features add powers such as X² and X³ so a linear coefficient model can represent curvature. Higher degree increases flexibility and can increase overfitting risk.")
-        st.markdown("### Ridge, Lasso and Elastic Net"); st.write("These regularised models add penalties to coefficient size. Ridge shrinks coefficients, Lasso can set some coefficients to zero, and Elastic Net combines L1 and L2 penalties.")
+        model_pick=st.selectbox("Select a regression method to study",["Linear Regression","Polynomial Regression","Ridge Regression","Lasso Regression","Elastic Net"],key="theory_stat_model")
+        model_info={
+            "Linear Regression": {
+                "idea":"Estimates an additive linear relationship between Y and the predictors.",
+                "equation":r"Y_i=\beta_0+\beta_1X_{i1}+\cdots+\beta_pX_{ip}+\varepsilon_i",
+                "objective":r"\hat\beta=\arg\min_\beta\sum_{i=1}^{n}(Y_i-X_i^T\beta)^2",
+                "workflow":"Data → specify Y/X → estimate coefficients by least squares → fitted values → residuals → diagnostics → prediction",
+                "app":"The app fits LinearRegression inside the common preprocessing pipeline, predicts the held-out test data, calculates RMSE/MAE/R², runs cross-validation, and separately fits an OLS model for inferential statistics.",
+                "interpret":"A coefficient describes the expected change in Y associated with a one-unit change in that predictor while the other included predictors are held constant, conditional on the model specification and assumptions.",
+                "caution":"Linearity, influential observations, multicollinearity, non-constant variance and omitted structure can affect interpretation. Statistical significance is not the same as predictive usefulness or causality."
+            },
+            "Polynomial Regression": {
+                "idea":"Adds polynomial terms such as X² or X³ to represent curvature while remaining linear in the coefficients.",
+                "equation":r"Y=\beta_0+\beta_1X+\beta_2X^2+\cdots+\beta_dX^d+\varepsilon",
+                "objective":"Estimate coefficients by least squares after generating polynomial features.",
+                "workflow":"Data → generate polynomial features → scale → estimate coefficients → predict → validate",
+                "app":"The app creates PolynomialFeatures at the selected degree (2 or 3), standardises the expanded features, fits linear regression, and compares the result with the other models.",
+                "interpret":"Individual higher-order coefficients are often harder to interpret alone. The fitted curve and out-of-sample metrics are more informative for prediction.",
+                "caution":"Higher degree increases flexibility and can create unstable extrapolation and overfitting, especially with small samples."
+            },
+            "Ridge Regression": {
+                "idea":"Linear regression with an L2 penalty that shrinks coefficients toward zero and can stabilise estimation when predictors are correlated.",
+                "equation":r"\hat\beta=\arg\min_\beta\left[\sum_i(Y_i-X_i^T\beta)^2+\lambda\sum_j\beta_j^2\right]",
+                "objective":"Balance fit to the data against coefficient magnitude.",
+                "workflow":"Data → preprocess/standardise → choose penalty α → shrink coefficients → predict → validate",
+                "app":"The app uses Ridge(alpha=1.0) after preprocessing and evaluates it with the same train/test and cross-validation structure as the other models.",
+                "interpret":"Ridge keeps all predictors in the model but reduces the size of their coefficients. It is often useful when predictors contain overlapping information.",
+                "caution":"Coefficient shrinkage means Ridge coefficients are not equivalent to ordinary least-squares coefficients; the penalty parameter should ideally be tuned."
+            },
+            "Lasso Regression": {
+                "idea":"Linear regression with an L1 penalty that encourages some coefficients to become exactly zero.",
+                "equation":r"\hat\beta=\arg\min_\beta\left[\sum_i(Y_i-X_i^T\beta)^2+\lambda\sum_j|\beta_j|\right]",
+                "objective":"Trade predictive fit against sparse coefficient structure.",
+                "workflow":"Data → preprocess/standardise → apply L1 penalty → shrink/select coefficients → predict → validate",
+                "app":"The app fits Lasso(alpha=0.1) with a high iteration limit, then compares its test and cross-validation performance with Ridge and the unregularised linear model.",
+                "interpret":"A zero coefficient means the fitted penalised model has removed that feature from the linear predictor at the selected penalty strength.",
+                "caution":"With correlated predictors, Lasso may select one variable and suppress another even when both contain information; coefficient selection can be unstable."
+            },
+            "Elastic Net": {
+                "idea":"Combines L1 sparsity with L2 stabilisation.",
+                "equation":r"\hat\beta=\arg\min_\beta\left[\sum_i(Y_i-X_i^T\beta)^2+\lambda\left(\alpha\sum_j|\beta_j|+(1-\alpha)\sum_j\beta_j^2\right)\right]",
+                "objective":"Balance variable selection and coefficient shrinkage.",
+                "workflow":"Data → preprocess/standardise → combine L1/L2 penalties → estimate → predict → validate",
+                "app":"The app uses ElasticNet(alpha=0.1, l1_ratio=0.5) as a balanced regularised reference model.",
+                "interpret":"A useful option when predictors are numerous or correlated and a mixture of shrinkage and sparsity is desirable.",
+                "caution":"The penalty settings materially affect the fitted model and are better tuned with validation for research production use."
+            },
+        }[model_pick]
+        st.markdown(f"### {model_pick}")
+        st.markdown(f'<div class="card"><b>Core idea</b><br>{model_info["idea"]}</div>',unsafe_allow_html=True)
+        st.markdown("**Mathematical form**")
+        st.latex(model_info["equation"])
+        st.markdown("**Estimation / optimisation**")
+        st.latex(model_info["objective"])
+        st.markdown("**Process flow**")
+        st.markdown(f'<div class="formula">{model_info["workflow"]}</div>',unsafe_allow_html=True)
+        st.markdown("**How this application runs it**")
+        st.write(model_info["app"])
+        st.markdown("**How to read the result**")
+        st.write(model_info["interpret"])
+        st.markdown("**Important limitations**")
+        st.warning(model_info["caution"])
+
     with theory_tabs[2]:
-        st.markdown("### Random Forest"); st.write("Random Forest builds many decision trees using resampled observations and random subsets of predictors. Each tree captures nonlinear splits and interactions; predictions are aggregated across trees.")
-        st.markdown("### Gradient Boosting"); st.write("Gradient Boosting builds trees sequentially. Each new tree focuses on remaining prediction error, gradually improving the ensemble. This flexibility can capture nonlinear patterns but requires validation to control overfitting.")
+        ai_pick=st.selectbox("Select an AI regression method to study",["Random Forest","Gradient Boosting"],key="theory_ai_model")
+        if ai_pick=="Random Forest":
+            st.markdown("### Random Forest Regression")
+            st.write("Random Forest is an ensemble of many decision trees. Each tree repeatedly partitions the predictor space into regions and assigns a prediction within each terminal region. Randomness is introduced through resampled observations and random subsets of candidate predictors; the final regression prediction aggregates the trees.")
+            st.markdown("**Conceptual flow**")
+            st.markdown('<div class="formula">Data → bootstrap/resampled samples → many decision trees → nonlinear splits + interactions → average tree predictions → final prediction</div>',unsafe_allow_html=True)
+            st.markdown("**What one tree is doing**")
+            st.write("At each split the tree searches for a rule such as X₁ < c that reduces within-node prediction error. The tree continues until its stopping rules are reached. The forest averages many such trees, reducing the instability of a single tree.")
+            st.markdown("**How this application runs it**")
+            st.write("The app preprocesses the selected X variables, trains the requested number of trees on the training data, predicts the test set, performs cross-validation, and reports test and full-data metrics. Feature importance can be inspected in Chart Studio.")
+            st.markdown("**Strengths and cautions**")
+            st.write("It can capture nonlinear effects and interactions without the analyst specifying each interaction term. It can still overfit under inappropriate settings, and tree-based feature importance should not be interpreted as a causal effect or a regression coefficient.")
+        else:
+            st.markdown("### Gradient Boosting Regression")
+            st.write("Gradient Boosting builds an additive ensemble sequentially. The first model gives an initial prediction; each new tree is fitted to the remaining error signal, and the ensemble is updated by a learning rate.")
+            st.markdown("**Conceptual flow**")
+            st.markdown('<div class="formula">Initial prediction → calculate errors → fit correction tree → shrink correction → update prediction → repeat → final prediction</div>',unsafe_allow_html=True)
+            st.markdown("**Why it is powerful**")
+            st.write("By repeatedly correcting previous mistakes, the ensemble can represent complex nonlinear relationships and interactions. The number of trees, tree depth and learning rate jointly control flexibility.")
+            st.markdown("**How this application runs it**")
+            st.write("The app fits GradientBoostingRegressor with the configured tree count, learning rate and depth settings, evaluates it on the test set, runs cross-validation, and exposes feature importance in Chart Studio.")
+            st.markdown("**Cautions**")
+            st.write("Boosting can fit noise when too flexible. Cross-validation and the untouched test set are therefore important. Feature importance describes predictive contribution within the fitted ensemble; it is not a causal effect size.")
+
     with theory_tabs[3]:
-        st.markdown("### Residual hybrid modelling"); st.latex(r"\hat m_H(X)=\hat g(X)+\hat h(X)"); st.write("The statistical model provides an interpretable base structure. Out-of-fold residuals are then calculated so the AI learner does not simply memorise residuals from predictions generated on the same observations used to fit the base model. The AI component learns predictable residual structure. Final prediction is the base prediction plus the learned correction.")
-        st.markdown("### Hybrid workflow"); st.markdown("**Base model → Out-of-fold predictions → Residuals → AI residual learner → Refit base model → Base prediction + AI correction → Validation**")
+        st.markdown("### Residual-learning hybrid regression")
+        st.latex(r"Y=m(X)+\varepsilon")
+        st.latex(r"\hat m_H(X)=\hat g(X)+\hat h(X)")
+        st.write("Here the statistical model provides the structured base prediction g(X), while an AI residual learner h(X) attempts to explain predictable structure that the statistical model has not captured.")
+        st.markdown("**Step-by-step hybrid process**")
+        hybrid_steps=[
+            "Fit the statistical base model inside training folds.",
+            "Generate out-of-fold predictions for each training observation.",
+            "Calculate out-of-fold residuals: observed Y minus out-of-fold base prediction.",
+            "Fit the AI residual learner to those residuals.",
+            "Refit the statistical base model on the complete training data.",
+            "For new observations, calculate base prediction + AI residual correction.",
+            "Evaluate the hybrid only on the untouched test set.",
+        ]
+        for i,step in enumerate(hybrid_steps,1): st.markdown(f"**{i}.** {step}")
+        st.markdown("**Why out-of-fold residuals matter**")
+        st.write("Training an AI model on residuals calculated from predictions generated on the same observations used to fit the base model can leak overly optimistic structure into the residual learner. Out-of-fold residuals are designed to reduce that problem by making each residual correspond to a base prediction produced without using that observation for fitting.")
+        st.markdown("**When hybridisation can help**")
+        st.write("It can help when the statistical component captures a meaningful interpretable structure but leaves residual patterns that are systematic and predictable. If the base model already captures the systematic signal or the remaining residual is mostly irreducible noise, an AI correction may add little or may overfit.")
+        st.markdown("**How the app evaluates it**")
+        st.write("The hybrid is compared with the base statistical model using the same held-out test set. The important quantity is the out-of-sample change in error, not the improvement obtained by fitting the hybrid to the same observations used for evaluation.")
+
     with theory_tabs[4]:
-        st.markdown("### Metrics"); st.latex(r"RMSE=\sqrt{\frac{1}{n}\sum_i(Y_i-\hat Y_i)^2}"); st.latex(r"MAE=\frac{1}{n}\sum_i|Y_i-\hat Y_i|"); st.latex(r"R^2=1-\frac{SSE}{SST}")
-        st.write("Lower RMSE/MAE indicate smaller prediction errors. R² measures improvement relative to a mean-baseline reference on the same evaluation sample.")
-        st.markdown("### Validation logic"); st.write("Training data are used for fitting. Cross-validation estimates performance within the training data. The untouched test set is reserved for final out-of-sample evaluation. Full-data OLS inference is a separate analysis and should not be confused with test-set prediction.")
+        st.markdown("### Prediction metrics")
+        st.latex(r"RMSE=\sqrt{\frac{1}{n}\sum_i(Y_i-\hat Y_i)^2}")
+        st.latex(r"MAE=\frac{1}{n}\sum_i|Y_i-\hat Y_i|")
+        st.latex(r"R^2=1-\frac{\sum_i(Y_i-\hat Y_i)^2}{\sum_i(Y_i-\bar Y)^2}")
+        st.write("RMSE penalises large errors more strongly than MAE. MAE is in the same units as Y and is easier to interpret as average absolute error. R² is a relative fit measure and should always be interpreted on the same evaluation sample when comparing models.")
+        st.markdown("### Cross-validation")
+        st.write("K-fold cross-validation repeatedly fits a model on K−1 folds and evaluates it on the remaining fold. The app reports the mean cross-validation error and its fold-to-fold variation.")
+        st.markdown("### Final test set")
+        st.write("The final test set is intentionally excluded from model fitting and cross-validation. It is the most direct internal estimate in this app of how the selected analysis behaves on unseen observations from the same data-generating population.")
+        st.markdown("### Inference versus prediction")
+        st.write("OLS coefficients, standard errors, p-values and confidence intervals answer inferential questions under the model assumptions. Test-set RMSE/MAE/R² answer predictive questions. A model can have statistically important coefficients without producing the best out-of-sample predictions, and a predictive model can be useful without providing conventional coefficient inference.")
+        st.markdown("### Overfitting")
+        st.write("A large training performance with materially weaker test performance is a warning sign. Flexible models should therefore be compared using cross-validation and an untouched test set rather than training fit alone.")
 
 # Central analysis control — shown only on the Data & EDA tab
 with tabs[1]:
@@ -414,152 +554,228 @@ with tabs[7]:
     st.markdown("### Research conclusion"); st.write(f"The analysis compares statistical, regularised, AI and hybrid models. The selected model under **{criterion}** is **{selected_model}**. Conclusions should report full-data inference, cross-validation, untouched-test performance, hybrid incremental value and diagnostics separately.")
 
 with tabs[8]:
-    st.subheader("🎨 Chart Studio")
-    st.caption("Build charts directly from your uploaded dataset or from the model results. Choose the chart, variables and grouping options below.")
-    chart_tabs=st.tabs(["📊 Dataset Explorer","📈 Model Diagnostics"])
+    st.subheader("🎨 Advanced Chart Studio")
+    st.caption("Use this workspace for research-quality exploratory plots, regression diagnostics, model comparison visuals and publication-ready inspection. Colour controls are provided where useful.")
+    chart_tabs=st.tabs(["🔎 Advanced Data Explorer","📉 Model Diagnostics","📊 Research Comparison"])
 
     with chart_tabs[0]:
+        st.markdown("### Advanced exploratory data visualisation")
         nums=[c for c in df.columns if pd.api.types.is_numeric_dtype(df[c])]
         cats=[c for c in df.columns if c not in nums]
-        if not nums:
-            st.warning("No numeric variables are available for charting.")
-        else:
-            c1,c2=st.columns([1,2],gap="large")
-            with c1:
-                chart_type=st.selectbox("Choose chart",["Scatter plot","Histogram","Box plot","Bar chart","Line / trend","Correlation heatmap"],key="studio_chart")
-            with c2:
-                st.markdown("**Chart purpose**")
-                purpose={
-                    "Scatter plot":"Explore the relationship between two numeric variables.",
-                    "Histogram":"Inspect the distribution of one numeric variable.",
-                    "Box plot":"Compare a numeric variable across groups and identify outliers.",
-                    "Bar chart":"Compare group-level averages for a numeric measure.",
-                    "Line / trend":"Inspect an ordered trend using a numeric or date-like x variable.",
-                    "Correlation heatmap":"Inspect pairwise linear correlation among numeric variables."
-                }[chart_type]
-                st.info(purpose)
-
-            fig=None
-            if chart_type=="Scatter plot":
-                a,b,c=st.columns(3)
-                with a: xx=st.selectbox("X variable",nums,key="scatter_x")
-                with b:
-                    ychoices=[n for n in nums if n!=xx] or nums
-                    yy=st.selectbox("Y variable",ychoices,key="scatter_y")
-                with c:
-                    group_choices=["None"]+cats
-                    gg=st.selectbox("Colour / group",group_choices,key="scatter_group")
-                plot_df=df[[xx,yy]+([] if gg=="None" else [gg])].dropna()
-                if plot_df.empty: st.warning("No complete rows are available for this chart.")
-                else:
-                    fig=px.scatter(plot_df,x=xx,y=yy,color=None if gg=="None" else gg,hover_data=plot_df.columns,title=f"{yy} vs {xx}")
-                    fig.update_traces(marker=dict(size=8,opacity=.72))
-
-            elif chart_type=="Histogram":
-                a,b,c=st.columns(3)
-                with a: v=st.selectbox("Variable",nums,key="hist_var")
-                with b: bins=st.slider("Number of bins",10,80,30,5,key="hist_bins")
-                with c: group_choices=["None"]+cats; gg=st.selectbox("Colour / group",group_choices,key="hist_group")
-                plot_df=df[[v]+([] if gg=="None" else [gg])].dropna()
-                fig=px.histogram(plot_df,x=v,color=None if gg=="None" else gg,nbins=bins,barmode="overlay" if gg!="None" else "relative",title=f"Distribution of {v}")
-
-            elif chart_type=="Box plot":
-                a,b=st.columns(2)
-                with a: v=st.selectbox("Numeric variable",nums,key="box_var")
-                with b: gg=st.selectbox("Group by",["None"]+cats,key="box_group")
-                plot_df=df[[v]+([] if gg=="None" else [gg])].dropna()
-                fig=px.box(plot_df,y=v,x=None if gg=="None" else gg,points="outliers",color=None if gg=="None" else gg,title=f"Box plot of {v}")
-
-            elif chart_type=="Bar chart":
-                if not cats:
-                    st.info("Bar charts need at least one categorical/grouping variable. Use Scatter, Histogram, Box or Correlation instead.")
-                else:
-                    a,b,c=st.columns(3)
-                    with a: gg=st.selectbox("Category / group",cats,key="bar_group")
-                    with b: v=st.selectbox("Numeric measure",nums,key="bar_value")
-                    with c: agg=st.selectbox("Aggregation",["Mean","Median","Sum","Count"],key="bar_agg")
-                    temp=df[[gg,v]].dropna()
-                    if agg=="Mean": p=temp.groupby(gg,dropna=False)[v].mean().reset_index(name="Value")
-                    elif agg=="Median": p=temp.groupby(gg,dropna=False)[v].median().reset_index(name="Value")
-                    elif agg=="Sum": p=temp.groupby(gg,dropna=False)[v].sum().reset_index(name="Value")
-                    else: p=temp.groupby(gg,dropna=False)[v].count().reset_index(name="Value")
-                    p=p.sort_values("Value",ascending=False).head(30)
-                    fig=px.bar(p,x=gg,y="Value",text_auto=".2f",title=f"{agg} of {v} by {gg}")
-
-            elif chart_type=="Line / trend":
-                a,b,c=st.columns(3)
-                with a: xx=st.selectbox("X / order variable",df.columns.tolist(),key="line_x")
-                with b: v=st.selectbox("Numeric measure",nums,key="line_y")
-                with c: gg=st.selectbox("Group",["None"]+cats,key="line_group")
-                temp=df[[xx,v]+([] if gg=="None" else [gg])].dropna().copy()
-                # Preserve chronological order when a date-like column is selected; otherwise preserve dataset order.
-                parsed=pd.to_datetime(temp[xx],errors="coerce")
-                if parsed.notna().mean()>=.8:
-                    temp["__x_order"]=parsed; temp=temp.sort_values("__x_order"); temp[xx]=temp["__x_order"].dt.strftime("%Y-%m-%d")
-                fig=px.line(temp,x=xx,y=v,color=None if gg=="None" else gg,markers=True,title=f"{v} across {xx}")
-
-            else:
-                corr=df[nums].corr(numeric_only=True)
-                if corr.shape[0]<2:
-                    st.warning("At least two numeric variables are needed for a correlation heatmap.")
-                else:
-                    fig=px.imshow(corr,text_auto=".2f",aspect="auto",title="Pearson correlation heatmap",color_continuous_scale="RdBu_r",zmin=-1,zmax=1)
-
-            if fig is not None:
-                fig.update_layout(template="plotly_white",height=560,margin=dict(l=30,r=30,t=80,b=50),hovermode="closest")
-                st.plotly_chart(fig,use_container_width=True)
-                st.caption("Charts are exploratory: associations and visual patterns do not by themselves establish causation.")
-
-    with chart_tabs[1]:
-        st.markdown("### Model-based visual diagnostics")
-        diag_chart=st.selectbox("Choose diagnostic chart",["Test actual vs predicted","Test residuals vs predicted","Prediction error distribution","Cross-validation RMSE","Full-data R² comparison","Feature importance"],key="diag_chart")
+        explorer_type=st.selectbox("Choose data plot",[
+            "Distribution + box","Scatter with trend","Scatter matrix","Violin plot","Grouped box plot",
+            "ECDF / cumulative distribution","Missing-value profile","Correlation heatmap"
+        ],key="advanced_data_plot")
         fig=None
-        if diag_chart=="Test actual vs predicted":
-            model_for_chart=st.selectbox("Model",list(preds.keys()),key="diag_pred_model")
-            temp=pd.DataFrame({"Actual":yte.to_numpy(),"Predicted":preds[model_for_chart]})
-            fig=px.scatter(temp,x="Actual",y="Predicted",title=f"Actual vs predicted — {model_for_chart}",trendline="ols")
-            mn=float(min(temp["Actual"].min(),temp["Predicted"].min())); mx=float(max(temp["Actual"].max(),temp["Predicted"].max()))
-            fig.add_shape(type="line",x0=mn,x1=mx,y0=mn,y1=mx,line_dash="dash")
 
-        elif diag_chart=="Test residuals vs predicted":
-            model_for_chart=st.selectbox("Model",list(preds.keys()),key="diag_resid_model")
-            residual=yte.to_numpy()-preds[model_for_chart]
-            temp=pd.DataFrame({"Predicted":preds[model_for_chart],"Residual":residual})
-            fig=px.scatter(temp,x="Predicted",y="Residual",title=f"Residuals vs predicted — {model_for_chart}")
-            fig.add_hline(y=0,line_dash="dash")
+        if explorer_type=="Distribution + box":
+            v=st.selectbox("Numeric variable",nums,key="dist_var")
+            c1,c2,c3=st.columns(3)
+            hist_colour=c1.color_picker("Histogram colour","#2f80ed",key="hist_colour")
+            box_colour=c2.color_picker("Box colour","#f2994a",key="box_colour")
+            bins=c3.slider("Number of bins",10,80,30,key="hist_bins")
+            fig=go.Figure()
+            fig.add_trace(go.Histogram(x=df[v].dropna(),nbinsx=bins,name="Distribution",marker_color=hist_colour,opacity=.80))
+            fig.add_trace(go.Box(x=df[v].dropna(),name="Box summary",marker_color=box_colour,boxpoints="outliers",orientation="h",yaxis="y2"))
+            fig.update_layout(title=f"Distribution and box summary — {v}",xaxis_title=v,yaxis=dict(title="Frequency"),yaxis2=dict(title="Box summary",overlaying="y",side="right",showticklabels=False),barmode="overlay")
 
-        elif diag_chart=="Prediction error distribution":
-            model_for_chart=st.selectbox("Model",list(preds.keys()),key="diag_error_model")
-            residual=yte.to_numpy()-preds[model_for_chart]
-            fig=px.histogram(x=residual,nbins=30,marginal="box",title=f"Prediction error distribution — {model_for_chart}",labels={"x":"Prediction error"})
+        elif explorer_type=="Scatter with trend":
+            c1,c2=st.columns(2)
+            xx=c1.selectbox("X variable",nums,key="adv_scatter_x")
+            yy=c2.selectbox("Y variable",nums,index=min(1,len(nums)-1),key="adv_scatter_y")
+            colour_mode=st.selectbox("Point colouring",["Single colour","Categorical group","Continuous variable"],key="adv_scatter_colour_mode")
+            pts_color=st.color_picker("Point colour","#176b87",key="adv_scatter_point") if colour_mode=="Single colour" else None
+            group=None
+            if colour_mode=="Categorical group" and cats:
+                group=st.selectbox("Group",cats,key="adv_scatter_group")
+            elif colour_mode=="Continuous variable":
+                group=st.selectbox("Colour variable",nums,key="adv_scatter_cont")
+            temp=df[[xx,yy]+([] if group is None else [group])].dropna()
+            if colour_mode=="Single colour":
+                fig=px.scatter(temp,x=xx,y=yy,trendline="ols" if len(temp)>=10 else None,title=f"{yy} vs {xx}",color_discrete_sequence=[pts_color])
+            else:
+                fig=px.scatter(temp,x=xx,y=yy,color=group,trendline="ols" if len(temp)>=10 else None,title=f"{yy} vs {xx}")
 
-        elif diag_chart=="Cross-validation RMSE":
-            p=comparison.sort_values("CV RMSE")
-            fig=go.Figure(go.Bar(x=p["Model"],y=p["CV RMSE"],error_y=dict(type="data",array=p["CV RMSE SD"].fillna(0))))
-            fig.update_layout(title="Cross-validation RMSE ± SD",xaxis_title="Model",yaxis_title="CV RMSE")
+        elif explorer_type=="Scatter matrix":
+            selected=st.multiselect("Select up to 6 numeric variables",nums,default=nums[:min(4,len(nums))],max_selections=6,key="scatter_matrix_vars")
+            colour_var=st.selectbox("Optional colour/group variable",["None"]+cats,key="scatter_matrix_colour")
+            if len(selected)>=2:
+                smdf=df[selected+([] if colour_var=="None" else [colour_var])].dropna().head(1500)
+                fig=px.scatter_matrix(smdf,dimensions=selected,color=None if colour_var=="None" else colour_var,title="Scatter matrix of selected variables",height=900)
+            else:
+                st.info("Select at least two numeric variables.")
 
-        elif diag_chart=="Full-data R² comparison":
-            p=full_comparison.sort_values("R²",ascending=False)
-            fig=px.bar(p,x="Model",y="R²",color="Type",text_auto=".3f",title="Full-data R² comparison")
-            fig.update_yaxes(range=[max(0,float(p["R²"].min())-.05),min(1,float(p["R²"].max())+.05)])
+        elif explorer_type=="Violin plot":
+            c1,c2=st.columns(2)
+            v=c1.selectbox("Numeric variable",nums,key="violin_var")
+            g=c2.selectbox("Group",["None"]+cats,key="violin_group")
+            fig=px.violin(df,y=v,x=None if g=="None" else g,box=True,points="outliers",title=f"Violin distribution — {v}")
+
+        elif explorer_type=="Grouped box plot":
+            c1,c2=st.columns(2)
+            v=c1.selectbox("Numeric variable",nums,key="gbox_var")
+            g=c2.selectbox("Grouping variable",cats or df.columns.tolist(),key="gbox_group")
+            temp=df[[g,v]].dropna()
+            fig=px.box(temp,x=g,y=v,points="outliers",title=f"{v} by {g}")
+
+        elif explorer_type=="ECDF / cumulative distribution":
+            v=st.selectbox("Numeric variable",nums,key="ecdf_var")
+            fig=px.ecdf(df.dropna(subset=[v]),x=v,title=f"Empirical cumulative distribution — {v}")
+
+        elif explorer_type=="Missing-value profile":
+            miss=df.isna().sum().sort_values(ascending=False)
+            miss=miss[miss>0]
+            if miss.empty:
+                st.success("No missing values were detected in the uploaded dataset.")
+            else:
+                pct=(100*miss/len(df)).round(2)
+                mp=pd.DataFrame({"Variable":miss.index,"Missing count":miss.values,"Missing %":pct.values})
+                fig=px.bar(mp,x="Variable",y="Missing %",text="Missing %",title="Missing-value profile",hover_data=["Missing count"])
+                fig.update_traces(texttemplate="%{text:.2f}%")
 
         else:
-            # Tree-based feature importance after preprocessing. This is available for the two standalone AI models.
-            model_for_chart=st.selectbox("AI model",[m for m in ["Random Forest","Gradient Boosting"] if m in specs],key="importance_model")
-            ai_fit=make_clone(specs[model_for_chart]); ai_fit.fit(Xtr,ytr)
-            prep=ai_fit.named_steps["prep"]; mdl=ai_fit.named_steps["model"]
-            names=list(prep.get_feature_names_out())
-            vals=getattr(mdl,"feature_importances_",None)
-            if vals is None:
-                st.info("Feature importance is not available for this model.")
+            corr=df[nums].corr(numeric_only=True)
+            if corr.shape[0]>=2:
+                zmin=float(np.nanmin(corr.values)); zmax=float(np.nanmax(corr.values))
+                fig=px.imshow(corr,text_auto=".2f",aspect="auto",title="Pearson correlation heatmap",color_continuous_scale="RdBu_r",zmin=-1,zmax=1)
             else:
-                fi=pd.DataFrame({"Feature":names,"Importance":vals}).sort_values("Importance",ascending=False).head(25)
-                fig=px.bar(fi.sort_values("Importance"),x="Importance",y="Feature",orientation="h",title=f"Top feature importances — {model_for_chart}",text_auto=".3f")
+                st.info("At least two numeric variables are required for a correlation heatmap.")
 
         if fig is not None:
-            fig.update_layout(template="plotly_white",height=600,margin=dict(l=30,r=30,t=80,b=50),hovermode="closest")
+            fig.update_layout(template="plotly_white",height=620,margin=dict(l=30,r=30,t=80,b=50),hovermode="closest")
             st.plotly_chart(fig,use_container_width=True)
-            st.caption("Diagnostic charts support model checking; they should be interpreted together with numerical metrics and statistical diagnostics.")
+            st.caption("Exploratory plots describe patterns in the observed data. They do not by themselves establish causation.")
+
+    with chart_tabs[1]:
+        st.markdown("### Regression and prediction diagnostics")
+        diag_chart=st.selectbox("Choose diagnostic plot",[
+            "Actual vs predicted — points and line","Actual vs predicted — identity plot","Residuals vs predicted",
+            "Residual distribution","Prediction error by model","Prediction error by observation","Feature importance"
+        ],key="advanced_diag_plot")
+        fig=None
+        model_options=list(preds.keys())
+
+        if diag_chart=="Actual vs predicted — points and line":
+            model_for_chart=st.selectbox("Model",model_options,key="adv_actual_pred_model")
+            c1,c2,c3=st.columns(3)
+            actual_colour=c1.color_picker("Actual point colour","#2ca02c",key="adv_actual_colour")
+            predicted_colour=c2.color_picker("Predicted line colour","#1f77b4",key="adv_pred_colour")
+            line_width=c3.slider("Predicted line width",1,8,3,key="adv_pred_width")
+            actual_values=yte.to_numpy(dtype=float)
+            predicted_values=np.asarray(preds[model_for_chart],dtype=float)
+            obs=np.arange(1,len(actual_values)+1)
+            temp=pd.DataFrame({"Observation":obs,"Actual":actual_values,"Predicted":predicted_values})
+            fig=go.Figure()
+            fig.add_trace(go.Scatter(x=temp["Observation"],y=temp["Actual"],mode="markers",name="Actual — observed (points)",marker=dict(color=actual_colour,size=8),customdata=temp[["Actual","Predicted"]],hovertemplate="Obs %{x}<br>Actual: %{customdata[0]:.4f}<br>Predicted: %{customdata[1]:.4f}<extra></extra>"))
+            fig.add_trace(go.Scatter(x=temp["Observation"],y=temp["Predicted"],mode="lines",name=f"Predicted — {model_for_chart} (line)",line=dict(color=predicted_colour,width=line_width),customdata=temp[["Actual","Predicted"]],hovertemplate="Obs %{x}<br>Actual: %{customdata[0]:.4f}<br>Predicted: %{customdata[1]:.4f}<extra></extra>"))
+            fig.update_layout(title=f"Actual vs Predicted — {model_for_chart}",xaxis_title="Test observation order",yaxis_title=y_col,legend_title="Series",hovermode="x unified")
+            st.info("Actual = observed points. Predicted = model-estimated line. The line follows test-set observation order; it is not a regression trendline or a fitted line through the points.")
+
+        elif diag_chart=="Actual vs predicted — identity plot":
+            model_for_chart=st.selectbox("Model",model_options,key="adv_identity_model")
+            c1,c2=st.columns(2)
+            actual_colour=c1.color_picker("Actual point colour","#176b87",key="identity_point_colour")
+            identity_colour=c2.color_picker("1:1 reference line colour","#d62728",key="identity_line_colour")
+            temp=pd.DataFrame({"Actual":yte.to_numpy(dtype=float),"Predicted":np.asarray(preds[model_for_chart],dtype=float)})
+            fig=go.Figure(go.Scatter(x=temp["Actual"],y=temp["Predicted"],mode="markers",name="Test observations",marker=dict(color=actual_colour,size=8,opacity=.75)))
+            mn=float(min(temp.min().min(),temp.min().min())); mx=float(max(temp.max().max(),temp.max().max()))
+            fig.add_shape(type="line",x0=mn,x1=mx,y0=mn,y1=mx,line=dict(color=identity_colour,width=3,dash="dash"))
+            fig.add_annotation(x=mx,y=mx,text="Perfect prediction: y = ŷ",showarrow=False,xanchor="right",yanchor="bottom")
+            fig.update_layout(title=f"Actual vs predicted identity plot — {model_for_chart}",xaxis_title="Actual Y",yaxis_title="Predicted Ŷ")
+            st.info("In this version, the diagonal 1:1 line is the perfect-prediction reference. Points close to the diagonal have smaller prediction error.")
+
+        elif diag_chart=="Residuals vs predicted":
+            model_for_chart=st.selectbox("Model",model_options,key="adv_resid_model")
+            residual=yte.to_numpy()-preds[model_for_chart]
+            temp=pd.DataFrame({"Predicted":preds[model_for_chart],"Residual":residual})
+            point_colour=st.color_picker("Residual point colour","#9467bd",key="adv_resid_colour")
+            fig=px.scatter(temp,x="Predicted",y="Residual",title=f"Residuals vs predicted — {model_for_chart}",color_discrete_sequence=[point_colour])
+            fig.add_hline(y=0,line_dash="dash",line_width=2)
+            st.info("Look for an approximately structureless cloud around zero. Curvature, funnels or clusters can indicate remaining structure or changing error variance.")
+
+        elif diag_chart=="Residual distribution":
+            model_for_chart=st.selectbox("Model",model_options,key="adv_resid_hist_model")
+            residual=yte.to_numpy()-preds[model_for_chart]
+            hist_colour=st.color_picker("Residual histogram colour","#2ca02c",key="adv_resid_hist_colour")
+            fig=go.Figure(go.Histogram(x=residual,nbinsx=30,name="Residuals",marker_color=hist_colour))
+            fig.update_layout(title=f"Residual distribution — {model_for_chart}",xaxis_title="Residual = Actual − Predicted",yaxis_title="Count")
+
+        elif diag_chart=="Prediction error by model":
+            err=pd.DataFrame({m:yte.to_numpy()-p for m,p in preds.items()})
+            lm=err.melt(var_name="Model",value_name="Error")
+            fig=px.box(lm,x="Model",y="Error",points="outliers",title="Test prediction error by model")
+            fig.add_hline(y=0,line_dash="dash")
+            fig.update_xaxes(tickangle=-35)
+
+        elif diag_chart=="Prediction error by observation":
+            model_for_chart=st.selectbox("Model",model_options,key="adv_error_obs_model")
+            actual=yte.to_numpy(); pred=np.asarray(preds[model_for_chart]); err=actual-pred
+            fig=go.Figure()
+            fig.add_trace(go.Bar(x=np.arange(1,len(err)+1),y=err,name="Prediction error",marker_color="#17becf"))
+            fig.add_hline(y=0,line_dash="dash")
+            fig.update_layout(title=f"Prediction error by test observation — {model_for_chart}",xaxis_title="Test observation order",yaxis_title="Actual − Predicted")
+
+        else:
+            model_for_chart=st.selectbox("AI model",[m for m in ["Random Forest","Gradient Boosting"] if m in specs],key="adv_importance_model")
+            ai_fit=make_clone(specs[model_for_chart]); ai_fit.fit(Xtr,ytr)
+            prep=ai_fit.named_steps["prep"]; mdl=ai_fit.named_steps["model"]
+            names=list(prep.get_feature_names_out()); vals=getattr(mdl,"feature_importances_",None)
+            if vals is not None:
+                fi=pd.DataFrame({"Feature":names,"Importance":vals}).sort_values("Importance",ascending=False).head(25)
+                fig=px.bar(fi.sort_values("Importance"),x="Importance",y="Feature",orientation="h",title=f"Top feature importances — {model_for_chart}",text_auto=".3f")
+            else:
+                st.info("Feature importance is not available for this model.")
+
+        if fig is not None:
+            fig.update_layout(template="plotly_white",height=640,margin=dict(l=30,r=30,t=80,b=50),hovermode="closest")
+            st.plotly_chart(fig,use_container_width=True)
+
+    with chart_tabs[2]:
+        st.markdown("### Research comparison plots")
+        research_plot=st.selectbox("Choose comparison visual",[
+            "Model metric heatmap","Test RMSE with CV RMSE","Test R² by model","Train vs Test R²","CV RMSE with uncertainty","Full-data vs Test R²"
+        ],key="research_comparison_plot")
+        fig=None
+        if research_plot=="Model metric heatmap":
+            metric_cols=[c for c in ["RMSE","MAE","R²","CV RMSE"] if c in comparison.columns]
+            hm=comparison.set_index("Model")[metric_cols]
+            fig=px.imshow(hm,text_auto=".3f",aspect="auto",title="Model performance metric heatmap",color_continuous_scale="RdBu_r")
+
+        elif research_plot=="Test RMSE with CV RMSE":
+            p=comparison.copy()
+            fig=go.Figure()
+            fig.add_trace(go.Bar(x=p["Model"],y=p["RMSE"],name="Test RMSE"))
+            fig.add_trace(go.Scatter(x=p["Model"],y=p["CV RMSE"],name="Mean CV RMSE",mode="lines+markers"))
+            fig.update_layout(title="Test RMSE vs mean cross-validation RMSE",xaxis_title="Model",yaxis_title="RMSE")
+            fig.update_xaxes(tickangle=-35)
+
+        elif research_plot=="Test R² by model":
+            p=comparison.sort_values("R²",ascending=False)
+            fig=px.bar(p,x="Model",y="R²",color="Type",text_auto=".3f",title="Test-set R² by model")
+            fig.update_xaxes(tickangle=-35)
+
+        elif research_plot=="Train vs Test R²":
+            p=comparison.melt(id_vars=["Model","Type"],value_vars=["Train R²","R²"],var_name="Split",value_name="R²")
+            p["Split"]=p["Split"].replace({"Train R²":"Training","R²":"Test"})
+            fig=px.bar(p,x="Model",y="R²",color="Split",barmode="group",text_auto=".3f",title="Training vs test R²")
+            fig.update_xaxes(tickangle=-35)
+
+        elif research_plot=="CV RMSE with uncertainty":
+            p=comparison.sort_values("CV RMSE")
+            fig=go.Figure(go.Bar(x=p["Model"],y=p["CV RMSE"],error_y=dict(type="data",array=p["CV RMSE SD"].fillna(0))))
+            fig.update_layout(title="Mean cross-validation RMSE ± fold SD",xaxis_title="Model",yaxis_title="CV RMSE")
+            fig.update_xaxes(tickangle=-35)
+
+        else:
+            merged=full_comparison[["Model","R²"]].merge(comparison[["Model","R²"]],on="Model",suffixes=(" — Full data"," — Test"))
+            long=merged.melt("Model",var_name="Evaluation",value_name="R²")
+            fig=px.bar(long,x="Model",y="R²",color="Evaluation",barmode="group",text_auto=".3f",title="Full-data vs test-set R²")
+            fig.update_xaxes(tickangle=-35)
+
+        if fig is not None:
+            fig.update_layout(template="plotly_white",height=640,margin=dict(l=30,r=30,t=80,b=50),hovermode="closest")
+            st.plotly_chart(fig,use_container_width=True)
+            st.caption("Comparison plots are descriptive for the current dataset and validation design. Use the numerical tables alongside the visuals.")
 
 with tabs[9]:
     st.subheader("📄 Report & Export")
@@ -573,4 +789,4 @@ with tabs[9]:
         df.to_excel(w,"Data",index=False); full_comparison.to_excel(w,"Full Data Results",index=False); comparison.to_excel(w,"Model Comparison",index=False); pred_table.to_excel(w,"Test Predictions",index=False); coef.to_excel(w,"OLS Coefficients",index=False); anova.to_excel(w,"ANOVA",index=False); vif.to_excel(w,"VIF",index=False)
     st.download_button("📘 Complete Excel report",excel.getvalue(),"statistical_ai_complete_report.xlsx","application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
-st.divider(); st.caption("StatAI v11 • Statistical–AI Hybrid Modelling Platform • Research and educational use")
+st.divider(); st.caption("StatAI v14 • Statistical–AI Hybrid Modelling Platform • Research and educational use")
