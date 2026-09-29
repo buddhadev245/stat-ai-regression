@@ -269,6 +269,26 @@ def hybrid_fit(base,residual,X_train,y_train,X_eval,folds,seed):
     return bfinal,r,bfinal.predict(X_eval)+r.predict(X_eval),oof
 
 
+def hybrid_cv_scores(base,residual,X,y,outer_folds,inner_folds,seed):
+    """Leakage-safe outer cross-validation for the residual hybrid."""
+    X=X.reset_index(drop=True); y=y.reset_index(drop=True)
+    if len(X) < 3:
+        return []
+    outer=KFold(n_splits=max(2,min(outer_folds,len(X))),shuffle=True,random_state=seed)
+    results=[]
+    for tr_idx,va_idx in outer.split(X):
+        Xtr_o=X.iloc[tr_idx].reset_index(drop=True); ytr_o=y.iloc[tr_idx].reset_index(drop=True)
+        Xva_o=X.iloc[va_idx].reset_index(drop=True); yva_o=y.iloc[va_idx].reset_index(drop=True)
+        if len(Xtr_o) < 2:
+            continue
+        try:
+            _,_,pred,_=hybrid_fit(base,residual,Xtr_o,ytr_o,Xva_o,max(2,min(inner_folds,len(Xtr_o))),seed)
+            results.append(metrics(yva_o,pred))
+        except Exception:
+            continue
+    return results
+
+
 def make_clone(obj):
     from sklearn.base import clone
     return clone(obj)
@@ -345,25 +365,15 @@ if not x_cols:
     st.warning("⚠️ Please select at least one independent variable (X) before running the analysis.")
     st.stop()
 
+current_signature=(upload.name,getattr(upload,"size",None),y_col,tuple(x_cols),float(test_size),int(seed),int(folds),int(rf_trees),int(gb_trees),int(degree),criterion,selection_mode)
+if st.session_state.get("analysis_signature") != current_signature:
+    st.session_state["analysis_ready"]=False
+
 excluded_ids=[c for c in available if c not in x_cols and str(c).strip().lower().replace(" ","_") in ID_NAMES]
 if excluded_ids:
     st.info("ℹ️ Identifier columns excluded from the default predictors: " + ", ".join(excluded_ids))
 
-# Central analysis control — placed immediately below Y/X selection.
-st.markdown("### 🚀 Run Analysis")
-st.caption("After selecting Y and X, click the button below to run the complete regression, AI and hybrid analysis. You do not need to run it again when moving between result tabs.")
-run_clicked = st.button(
-    "🚀 Run / Refresh Complete Analysis",
-    type="primary",
-    use_container_width=True,
-    key="run_analysis_main_top"
-)
-if run_clicked:
-    st.session_state["analysis_ready"] = True
-    st.session_state["analysis_y"] = y_col
-    st.session_state["analysis_x"] = list(x_cols)
-
-# Show tabs after the run control.
+# Show tabs before analysis so the app never crashes just because a model fails.
 tabs=st.tabs(["🏠 Overview","📁 Data & EDA","🎨 Chart Studio","📊 Full Data Results","📚 Theory & How It Works","📈 Predictive Results","🩺 Diagnostics & Inference","💡 Results Interpretation & Limitations","📄 Report & Export"])
 
 with tabs[0]:
@@ -446,25 +456,7 @@ with tabs[4]:
         st.markdown(''.join(flow_html), unsafe_allow_html=True)
         st.caption("↔ Scroll horizontally to follow the complete research workflow from study definition to the final report.")
 
-        st.markdown("### Detailed explanation of each step")
-        for title,desc in workflow_details:
-            with st.expander(title,expanded=False):
-                st.write(desc)
-                if title.startswith("1."):
-                    st.markdown("**Research aim:** Decide whether the analysis is primarily inferential, predictive, or both. This determines how the results should be interpreted.")
-                elif title.startswith("5."):
-                    st.markdown("**Key rule:** The final test data should remain untouched during model fitting and model-selection decisions.")
-                elif title.startswith("9."):
-                    st.markdown("**Why it matters:** Cross-validation gives a more stable estimate of performance than relying on one training fit alone.")
-                elif title.startswith("11."):
-                    st.markdown("**Important:** Statistical inference and predictive performance answer different questions and should be reported separately.")
-                elif title.startswith("12."):
-                    st.markdown("**Research reporting:** State the data, preprocessing, model specification, validation design, results, diagnostics, limitations and practical implications so the analysis can be reproduced.")
-
-        st.markdown("### How one observation moves through the app")
-        st.markdown("**Data row → preprocessing → model fitting → prediction → error = Actual − Predicted → validation → interpretation**")
-        st.markdown("### What the user should remember")
-        st.warning("A high training R² is not enough. For prediction, the most important evidence comes from cross-validation and the untouched test set. For inference, coefficient uncertainty and model assumptions matter separately.")
+        st.info("Use the horizontal workflow above as the complete analysis path. Select an individual model topic for its mathematical theory and calculation details.")
 
     else:
         model_details={
@@ -485,7 +477,7 @@ with tabs[4]:
             "interpret":"For a numeric predictor, βj is the estimated change in the conditional mean of Y for a one-unit increase in Xj, holding the other included predictors constant.",
             "app":"The app fits the linear model, evaluates it using train/test and cross-validation, and separately fits a full-data OLS specification for inferential statistics.",
             "limits":["Incorrect functional form can bias interpretation.","Multicollinearity can make coefficients unstable.","Influential observations can strongly affect the fitted equation.","Heteroscedasticity can invalidate conventional standard errors if unaddressed.","Association is not automatically causation.","Extrapolation beyond the observed X range can be unsafe."],
-            "source":"Linear Regression / OLS"
+            "source":"Linear Regression"
         },
         "Polynomial Regression": {
             "purpose":"Represent curvature by transforming predictors into powers and interaction terms while remaining linear in the coefficients.",
@@ -659,16 +651,25 @@ with tabs[4]:
         elif info["source"] in ["Ridge Regression","Lasso Regression","Elastic Net Regression"]:
             st.caption("Regularisation changes coefficient estimation. Do not interpret these coefficients as ordinary OLS estimates or attach ordinary OLS p-values without an appropriate inference method.")
 
+# Central analysis control — shown only on the Data & EDA tab
+with tabs[1]:
+    st.markdown("### 🚀 Run Analysis")
+    st.caption("Choose Y and X above, then run the complete analysis. This is the only Run button in the app.")
+    run_clicked=st.button("🚀 Run Analysis",type="primary",use_container_width=True,key="run_analysis_main")
+
+if run_clicked:
+    st.session_state["analysis_ready"]=True
+    st.session_state["analysis_signature"]=current_signature
+
 if not st.session_state.get("analysis_ready",False):
     with tabs[0]:
-        st.info("Choose Y and X in **Data & EDA**, then click **Run / Refresh complete analysis**. Results tabs will populate after the analysis is run.")
-    with tabs[3]: st.info("Click **🚀 Run / Refresh Complete Analysis** above the tabs.")
-    with tabs[5]: st.info("Click **🚀 Run / Refresh Complete Analysis** above the tabs.")
-    with tabs[6]: st.info("Click **🚀 Run / Refresh Complete Analysis** above the tabs.")
-    with tabs[7]: st.info("Click **🚀 Run / Refresh Complete Analysis** above the tabs.")
-    with tabs[2]: st.info("Click **🚀 Run / Refresh Complete Analysis** above the tabs. Dataset charts remain available in the Chart Studio after the analysis is run.")
-    with tabs[8]: st.info("Click **🚀 Run / Refresh Complete Analysis** above the tabs.")
-    with tabs[9]: st.info("Click **🚀 Run / Refresh Complete Analysis** above the tabs.")
+        st.info("Choose Y and X in **Data & EDA**, then click **Run Analysis**. Results tabs populate after the analysis is run.")
+    with tabs[3]: st.info("Run the analysis first from **Data & EDA**.")
+    with tabs[4]: st.info("Run the analysis first from **Data & EDA**.")
+    with tabs[5]: st.info("Run the analysis first from **Data & EDA**.")
+    with tabs[6]: st.info("Run the analysis first from **Data & EDA**.")
+    with tabs[7]: st.info("Run the analysis first from **Data & EDA**.")
+    with tabs[8]: st.info("Run the analysis first from **Data & EDA**.")
     st.stop()
 
 try:
@@ -685,9 +686,9 @@ try:
             f"and statistical inference may be unstable. Interpret the results cautiously and "
             f"consider collecting more observations."
         )
-    if len(y) < 4:
+    if len(y) < 2:
         raise ValueError(
-            "At least 4 usable observations are required to create a train/test split and run the analysis."
+            "At least 2 usable observations are required. With one observation, an out-of-sample test cannot be calculated."
         )
     Xtr,Xte,ytr,yte=train_test_split(X,y,test_size=test_size,random_state=seed)
     specs=model_specs(X,rf_trees,gb_trees,degree,seed)
@@ -696,14 +697,16 @@ try:
         try:
             fit=make_clone(est); fit.fit(Xtr,ytr); pt=fit.predict(Xte); ptr=fit.predict(Xtr); preds[name]=pt; train_preds[name]=ptr
             mt=metrics(yte,pt); mtr=metrics(ytr,ptr); vals=[]
-            effective_folds = min(folds, len(ytr))
-            if effective_folds < 2:
-                raise ValueError("At least 2 training observations are required for cross-validation.")
-            kf=KFold(n_splits=effective_folds,shuffle=True,random_state=seed)
-            for ti,vi in kf.split(Xtr):
-                fm=make_clone(est); fm.fit(Xtr.iloc[ti],ytr.iloc[ti]); vals.append(metrics(ytr.iloc[vi],fm.predict(Xtr.iloc[vi])))
+            effective_folds=min(folds,len(ytr))
+            if effective_folds >= 2:
+                kf=KFold(n_splits=effective_folds,shuffle=True,random_state=seed)
+                for ti,vi in kf.split(Xtr):
+                    fm=make_clone(est); fm.fit(Xtr.iloc[ti],ytr.iloc[ti]); vals.append(metrics(ytr.iloc[vi],fm.predict(Xtr.iloc[vi])))
             rows.append({"Model":name,"Type":"AI" if name in ["Random Forest","Gradient Boosting"] else "Statistical","Train RMSE":mtr["RMSE"],"Train MAE":mtr["MAE"],"Train R²":mtr["R²"],"RMSE":mt["RMSE"],"MAE":mt["MAE"],"R²":mt["R²"]})
-            cvrows.append({"Model":name,"CV RMSE":np.mean([v["RMSE"] for v in vals]),"CV RMSE SD":np.std([v["RMSE"] for v in vals],ddof=1),"CV MAE":np.mean([v["MAE"] for v in vals]),"CV MAE SD":np.std([v["MAE"] for v in vals],ddof=1),"CV R²":np.mean([v["R²"] for v in vals]),"CV R² SD":np.std([v["R²"] for v in vals],ddof=1)})
+            if vals:
+                cvrows.append({"Model":name,"CV RMSE":np.mean([v["RMSE"] for v in vals]),"CV RMSE SD":np.std([v["RMSE"] for v in vals],ddof=1) if len(vals)>1 else np.nan,"CV MAE":np.mean([v["MAE"] for v in vals]),"CV MAE SD":np.std([v["MAE"] for v in vals],ddof=1) if len(vals)>1 else np.nan,"CV R²":np.mean([v["R²"] for v in vals]),"CV R² SD":np.std([v["R²"] for v in vals],ddof=1) if len(vals)>1 else np.nan})
+            else:
+                cvrows.append({"Model":name,"CV RMSE":np.nan,"CV RMSE SD":np.nan,"CV MAE":np.nan,"CV MAE SD":np.nan,"CV R²":np.nan,"CV R² SD":np.nan})
         except Exception as e:
             failures.append(f"{name}: {e}")
     base=make_pipe(LinearRegression(),X); residual=make_pipe(GradientBoostingRegressor(n_estimators=gb_trees,learning_rate=.05,max_depth=3,random_state=seed),X)
@@ -712,7 +715,11 @@ try:
         hyb_train=base_fit.predict(Xtr)+res_fit.predict(Xtr); preds["Linear + AI Residual Hybrid"]=hyb_pred; train_preds["Linear + AI Residual Hybrid"]=hyb_train
         mt=metrics(yte,hyb_pred); mtr=metrics(ytr,hyb_train)
         rows.append({"Model":"Linear + AI Residual Hybrid","Type":"Hybrid","Train RMSE":mtr["RMSE"],"Train MAE":mtr["MAE"],"Train R²":mtr["R²"],"RMSE":mt["RMSE"],"MAE":mt["MAE"],"R²":mt["R²"]})
-        cvrows.append({"Model":"Linear + AI Residual Hybrid","CV RMSE":np.sqrt(np.mean(oof**2)),"CV RMSE SD":np.nan,"CV MAE":np.mean(np.abs(oof)),"CV MAE SD":np.nan,"CV R²":1-np.sum(oof**2)/np.sum((ytr-ytr.mean())**2),"CV R² SD":np.nan})
+        hcv=hybrid_cv_scores(base,residual,Xtr,ytr,folds,folds,seed)
+        if hcv:
+            cvrows.append({"Model":"Linear + AI Residual Hybrid","CV RMSE":np.mean([v["RMSE"] for v in hcv]),"CV RMSE SD":np.std([v["RMSE"] for v in hcv],ddof=1) if len(hcv)>1 else np.nan,"CV MAE":np.mean([v["MAE"] for v in hcv]),"CV MAE SD":np.std([v["MAE"] for v in hcv],ddof=1) if len(hcv)>1 else np.nan,"CV R²":np.mean([v["R²"] for v in hcv]),"CV R² SD":np.std([v["R²"] for v in hcv],ddof=1) if len(hcv)>1 else np.nan})
+        else:
+            cvrows.append({"Model":"Linear + AI Residual Hybrid","CV RMSE":np.nan,"CV RMSE SD":np.nan,"CV MAE":np.nan,"CV MAE SD":np.nan,"CV R²":np.nan,"CV R² SD":np.nan})
     except Exception as e:
         failures.append(f"Linear + AI Residual Hybrid: {e}")
         oof=np.array([]); hyb_pred=None
@@ -721,14 +728,30 @@ try:
     comparison["Generalization Gap R²"]=comparison["Train R²"]-comparison["R²"]
     comparison["Test RMSE Rank"]=rank(comparison["RMSE"],True); comparison["Test MAE Rank"]=rank(comparison["MAE"],True); comparison["Test R² Rank"]=rank(comparison["R²"],False); comparison["Average Test Rank"]=comparison[["Test RMSE Rank","Test MAE Rank","Test R² Rank"]].mean(axis=1)
     comparison=comparison.sort_values("RMSE").reset_index(drop=True)
+    def choose_model(table,criterion_name):
+        if criterion_name=="Cross-validation RMSE":
+            s=table["CV RMSE"]
+            return table.loc[s.idxmin(),"Model"] if s.notna().any() else None
+        if criterion_name=="Cross-validation MAE":
+            s=table["CV MAE"]
+            return table.loc[s.idxmin(),"Model"] if s.notna().any() else None
+        if criterion_name=="Cross-validation R²":
+            s=table["CV R²"]
+            return table.loc[s.idxmax(),"Model"] if s.notna().any() else None
+        if criterion_name=="Test RMSE":
+            return table.loc[table["RMSE"].idxmin(),"Model"]
+        if criterion_name=="Test MAE":
+            return table.loc[table["MAE"].idxmin(),"Model"]
+        return table.loc[table["R²"].idxmax(),"Model"]
+
     if selection_mode=="Choose manually":
-        manual=st.sidebar.selectbox("Manual final model",comparison["Model"].tolist()); selected_model=manual
-    elif criterion=="Cross-validation RMSE": selected_model=comparison.loc[comparison["CV RMSE"].idxmin(),"Model"]
-    elif criterion=="Cross-validation MAE": selected_model=comparison.loc[comparison["CV MAE"].idxmin(),"Model"]
-    elif criterion=="Cross-validation R²": selected_model=comparison.loc[comparison["CV R²"].idxmax(),"Model"]
-    elif criterion=="Test RMSE": selected_model=comparison.loc[comparison["RMSE"].idxmin(),"Model"]
-    elif criterion=="Test MAE": selected_model=comparison.loc[comparison["MAE"].idxmin(),"Model"]
-    else: selected_model=comparison.loc[comparison["R²"].idxmax(),"Model"]
+        manual=st.sidebar.selectbox("Manual final model",comparison["Model"].tolist())
+        selected_model=manual
+    else:
+        selected_model=choose_model(comparison,criterion)
+        if selected_model is None:
+            st.info("Cross-validation is unavailable for this very small training sample, so the app is using the held-out test RMSE for model display.")
+            selected_model=choose_model(comparison,"Test RMSE")
     selrow=comparison[comparison["Model"]==selected_model].iloc[0]
 
     # Full-data models
@@ -825,66 +848,23 @@ with tabs[7]:
 
     st.markdown("### 1. Overall result")
     best_test=comparison.loc[comparison.RMSE.idxmin()]
-    best_cv=comparison.loc[comparison["CV RMSE"].idxmin()]
-    st.write(f"Under the current **{criterion}** selection rule, the displayed model is **{selected_model}**. On the current test split, **{best_test.Model}** has RMSE {best_test.RMSE:.4f}, while the lowest mean cross-validation RMSE is reported for **{best_cv.Model}** at {best_cv['CV RMSE']:.4f}.")
+    best_cv=comparison.loc[comparison["CV RMSE"].idxmin()] if comparison["CV RMSE"].notna().any() else None
+    if best_cv is not None:
+        st.write(f"Under the current **{criterion}** selection rule, the displayed model is **{selected_model}**. On the current test split, **{best_test.Model}** has RMSE {best_test.RMSE:.4f}, while the lowest mean cross-validation RMSE is reported for **{best_cv.Model}** at {best_cv['CV RMSE']:.4f}.")
+    else:
+        st.write(f"Cross-validation is unavailable for this very small training sample. The displayed model is **{selected_model}**, and the current test-set RMSE is {best_test.RMSE:.4f} for **{best_test.Model}**.")
     st.warning("⚠️ These are conditional results for this dataset, variable specification, preprocessing and validation design. They are not universal rankings of regression algorithms.")
 
     st.markdown("### 2. Model-by-model predictive interpretation")
-    st.caption("The same information is shown in one table so the models can be compared without opening separate sections.")
-
-    interpretation_rows=[]
     for _,r in comparison.iterrows():
-        model=str(r["Model"])
-        rmse=float(r["RMSE"])
-        mae=float(r["MAE"])
-        r2=float(r["R²"])
-        cv_rmse=float(r.get("CV RMSE",np.nan))
         gap=float(r.get("Generalization Gap R²",np.nan))
-
-        if np.isfinite(gap):
-            if gap>.15:
-                stability="Larger train–test gap; investigate possible overfitting and validate stability."
-            elif gap>.05:
-                stability="Noticeable train–test decline; compare with CV variation and diagnostics."
-            else:
-                stability="Relatively small train–test gap in this split; still confirm with cross-validation."
-        else:
-            stability="Generalisation-gap information unavailable."
-
-        if r2 < 0:
-            r2_text="Test R² is negative; predictions are worse than the mean-baseline reference on this test set."
-        elif r2 < 0.25:
-            r2_text="Test R² is relatively low; the model explains limited variation on this test set."
-        elif r2 < 0.50:
-            r2_text="Test R² shows moderate explanatory/predictive improvement over the mean baseline."
-        else:
-            r2_text="Test R² is comparatively high on this test set; verify that the result is stable across validation folds."
-
-        interpretation_rows.append({
-            "Model": model,
-            "Type": str(r.get("Type","")),
-            "Test RMSE": rmse,
-            "Test MAE": mae,
-            "Test R²": r2,
-            "CV RMSE": cv_rmse,
-            "Generalization Gap R²": gap,
-            "Plain-language interpretation": f"RMSE={rmse:.3f}; MAE={mae:.3f}. {r2_text}",
-            "Stability / warning": stability,
-        })
-
-    interpretation_table=pd.DataFrame(interpretation_rows)
-    st.dataframe(
-        interpretation_table.style.format({
-            "Test RMSE":"{:.4f}",
-            "Test MAE":"{:.4f}",
-            "Test R²":"{:.4f}",
-            "CV RMSE":"{:.4f}",
-            "Generalization Gap R²":"{:.4f}",
-        }),
-        use_container_width=True,
-        hide_index=True,
-    )
-    st.info("Reading the table: lower Test RMSE and Test MAE indicate smaller errors on the same test set. Higher Test R² indicates greater improvement over the mean baseline on that test set. CV RMSE and the generalisation gap help assess stability beyond a single test result.")
+        with st.expander(str(r["Model"]),expanded=False):
+            st.write(f"**Test RMSE:** {r['RMSE']:.4f} | **Test MAE:** {r['MAE']:.4f} | **Test R²:** {r['R²']:.4f} | **CV RMSE:** {r.get('CV RMSE',np.nan):.4f}")
+            st.write("Lower RMSE/MAE indicate smaller prediction errors. Higher R² indicates better performance relative to the mean baseline on the same evaluation sample.")
+            if np.isfinite(gap):
+                if gap>.15: st.warning("The training-to-test R² gap is relatively large. Investigate possible overfitting, model complexity and validation stability.")
+                elif gap>.05: st.info("There is a noticeable training-to-test decline. Compare this with cross-validation variability and residual diagnostics.")
+                else: st.success("The training-to-test R² gap is comparatively small in this split; still confirm stability with cross-validation.")
 
     st.markdown("### 3. Error metrics in plain language")
     with st.expander("RMSE — what does it tell me?",expanded=False):
@@ -1125,4 +1105,4 @@ with tabs[8]:
         df.to_excel(w,"Data",index=False); full_comparison.to_excel(w,"Full Data Results",index=False); comparison.to_excel(w,"Model Comparison",index=False); pred_table.to_excel(w,"Test Predictions",index=False); coef.to_excel(w,"OLS Coefficients",index=False); anova.to_excel(w,"ANOVA",index=False); vif.to_excel(w,"VIF",index=False)
     st.download_button("📘 Complete Excel report",excel.getvalue(),"statistical_ai_complete_report.xlsx","application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
-st.divider(); st.caption("StatAI v17 • Statistical–AI Hybrid Modelling Platform • Research and educational use")
+st.divider(); st.caption("StatAI v22 • Statistical–AI Hybrid Modelling Platform • Research and educational use")
