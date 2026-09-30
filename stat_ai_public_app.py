@@ -345,21 +345,38 @@ if not numeric:
     st.error("No usable numeric variables were detected."); st.stop()
 
 st.success(f"Loaded **{len(df):,} rows × {len(df.columns):,} columns**")
+if {"Yield_t_ha","Year","Rainfall_mm","Mean_Temp_C","Fertilizer_kg_ha","Irrigation_Index"}.issubset(df.columns):
+    st.caption("📌 **PhD presentation dataset detected:** 300-row synthetic agriculture example. Presentation settings: Y = Yield_t_ha; X = Year, Rainfall_mm, Mean_Temp_C, Fertilizer_kg_ha, Irrigation_Index; test size = 20%; seed = 42; 5-fold CV; polynomial degree = 2.")
 
 # Main variable-selection panel
 # Y must be selected before variables depending on y_col are calculated.
 st.markdown("### 🎯 Choose your regression variables")
-st.caption("Select the dependent variable (Y) and one or more independent variables (X). The X selector accepts both numeric and categorical predictors. Common identifier columns are excluded from the default selection but remain available if you intentionally want to use one.")
-sel1, sel2 = st.columns([1, 2], gap="large")
-with sel1:
-    y_col=st.selectbox("Dependent variable / outcome (Y)", numeric, key="main_y")
-with sel2:
+st.caption("For the agriculture demonstration used in the PhD presentation, the app defaults to Yield as Y and Year, Rainfall, Mean Temperature, Fertilizer and Irrigation as X. Other datasets use a sensible numeric default.")
+
+# Put the only Run button directly beside the Y/X selectors.
+sel_y, sel_x, sel_run = st.columns([1.05, 2.15, 0.80], gap="medium", vertical_alignment="bottom")
+with sel_y:
+    if "Yield_t_ha" in numeric:
+        default_y_index = numeric.index("Yield_t_ha")
+    else:
+        default_y_index = 0
+    y_col=st.selectbox("Dependent variable / outcome (Y)", numeric, index=default_y_index, key="main_y")
+
+with sel_x:
     available=[c for c in df.columns if c!=y_col]
     non_id=[c for c in available if str(c).strip().lower().replace(" ","_") not in ID_NAMES]
-    default=[c for c in non_id if c in numeric][:5]
+    presentation_x=["Year","Rainfall_mm","Mean_Temp_C","Fertilizer_kg_ha","Irrigation_Index"]
+    if y_col == "Yield_t_ha" and all(c in available for c in presentation_x):
+        default=[c for c in presentation_x if c in numeric]
+    else:
+        default=[c for c in non_id if c in numeric][:5]
     if not default:
         default=[c for c in available if c in numeric][:5]
     x_cols=st.multiselect("Independent variables / predictors (X)", available, default=default, key="main_x", help="Choose the variables used to explain or predict Y. You can select multiple variables.")
+
+with sel_run:
+    st.markdown("**🚀 Run Analysis**")
+    run_clicked=st.button("🚀 Run Analysis",type="primary",use_container_width=True,key="run_analysis_main_top")
 
 if not x_cols:
     st.warning("⚠️ Please select at least one independent variable (X) before running the analysis.")
@@ -380,7 +397,7 @@ with tabs[0]:
     st.markdown('<div class="card"><h2>Analysis overview</h2><p>Upload data, inspect quality, choose the outcome and predictors, run the models, compare full-data fit with out-of-sample prediction, examine the residual hybrid, check diagnostics, and interpret the evidence.</p></div>',unsafe_allow_html=True)
     a,b,c=st.columns(3); a.metric("Rows",f"{len(df):,}"); b.metric("Columns",f"{len(df.columns):,}"); c.metric("Selected predictors",f"{len(x_cols):,}")
     st.markdown("### Analysis status")
-    st.info("Click **Run analysis** below after selecting your variables. The model calculations are intentionally separated from the page layout so a model error does not crash the entire application.")
+    st.info("Select Y and X, then click **Run Analysis** beside the selectors. The model calculations are intentionally separated from the page layout so a model error does not crash the entire application.")
 
 with tabs[1]:
     st.subheader("📁 Data & EDA")
@@ -651,25 +668,20 @@ with tabs[4]:
         elif info["source"] in ["Ridge Regression","Lasso Regression","Elastic Net Regression"]:
             st.caption("Regularisation changes coefficient estimation. Do not interpret these coefficients as ordinary OLS estimates or attach ordinary OLS p-values without an appropriate inference method.")
 
-# Central analysis control — shown only on the Data & EDA tab
-with tabs[1]:
-    st.markdown("### 🚀 Run Analysis")
-    st.caption("Choose Y and X above, then run the complete analysis. This is the only Run button in the app.")
-    run_clicked=st.button("🚀 Run Analysis",type="primary",use_container_width=True,key="run_analysis_main")
-
+# The Run button is beside the Y/X selectors above; no duplicate Run button is shown in any tab.
 if run_clicked:
     st.session_state["analysis_ready"]=True
     st.session_state["analysis_signature"]=current_signature
 
 if not st.session_state.get("analysis_ready",False):
     with tabs[0]:
-        st.info("Choose Y and X in **Data & EDA**, then click **Run Analysis**. Results tabs populate after the analysis is run.")
-    with tabs[3]: st.info("Run the analysis first from **Data & EDA**.")
-    with tabs[4]: st.info("Run the analysis first from **Data & EDA**.")
-    with tabs[5]: st.info("Run the analysis first from **Data & EDA**.")
-    with tabs[6]: st.info("Run the analysis first from **Data & EDA**.")
-    with tabs[7]: st.info("Run the analysis first from **Data & EDA**.")
-    with tabs[8]: st.info("Run the analysis first from **Data & EDA**.")
+        st.info("Choose Y and X, then click the **Run Analysis** button beside the selectors. Results tabs populate after the analysis is run.")
+    with tabs[3]: st.info("Select Y and X and click **Run Analysis** above.")
+    with tabs[4]: st.info("Select Y and X and click **Run Analysis** above.")
+    with tabs[5]: st.info("Select Y and X and click **Run Analysis** above.")
+    with tabs[6]: st.info("Select Y and X and click **Run Analysis** above.")
+    with tabs[7]: st.info("Select Y and X and click **Run Analysis** above.")
+    with tabs[8]: st.info("Select Y and X and click **Run Analysis** above.")
     st.stop()
 
 try:
@@ -709,7 +721,9 @@ try:
                 cvrows.append({"Model":name,"CV RMSE":np.nan,"CV RMSE SD":np.nan,"CV MAE":np.nan,"CV MAE SD":np.nan,"CV R²":np.nan,"CV R² SD":np.nan})
         except Exception as e:
             failures.append(f"{name}: {e}")
-    base=make_pipe(LinearRegression(),X); residual=make_pipe(GradientBoostingRegressor(n_estimators=gb_trees,learning_rate=.05,max_depth=3,random_state=seed),X)
+    # Presentation-aligned hybrid: Linear statistical base + Random Forest residual learner.
+    base=make_pipe(LinearRegression(),X)
+    residual=make_pipe(RandomForestRegressor(n_estimators=rf_trees,random_state=seed,n_jobs=-1),X)
     try:
         base_fit,res_fit,hyb_pred,oof=hybrid_fit(base,residual,Xtr,ytr,Xte,folds,seed)
         hyb_train=base_fit.predict(Xtr)+res_fit.predict(Xtr); preds["Linear + AI Residual Hybrid"]=hyb_pred; train_preds["Linear + AI Residual Hybrid"]=hyb_train
