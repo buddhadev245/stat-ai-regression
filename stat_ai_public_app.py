@@ -17,6 +17,7 @@ from sklearn.preprocessing import StandardScaler, PolynomialFeatures, OneHotEnco
 from sklearn.linear_model import LinearRegression, Ridge, Lasso, ElasticNet
 from sklearn.ensemble import RandomForestRegressor, GradientBoostingRegressor
 from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
+from sklearn.inspection import permutation_importance
 
 warnings.filterwarnings("ignore")
 st.set_page_config(page_title="StatAI | Statistical–AI Hybrid Modelling", page_icon="📊", layout="wide")
@@ -42,7 +43,7 @@ div[data-testid="stMetric"]{background:#f6fafb;border:1px solid #dcecef;padding:
 </style>
 """, unsafe_allow_html=True)
 
-st.markdown('<div class="hero"><div class="kicker">Research • prediction • inference • reproducibility</div><div class="title">📊 Statistical–AI Hybrid Modelling Platform</div><div class="subtitle">A browser-based workspace for exploratory analysis, statistical regression, machine-learning comparison, residual hybrid modelling, diagnostics, interpretation and reproducible reporting.</div></div>', unsafe_allow_html=True)
+st.markdown('<div class="hero"><div class="kicker">Research • prediction • inference • reproducibility</div><div class="title">🔎 Explainable Statistical–AI Hybrid Modelling</div><div class="subtitle">A research-oriented workspace for exploratory analysis, statistical regression, machine-learning comparison, residual hybrid modelling, explainable AI, uncertainty, diagnostics and reproducible reporting.</div></div>', unsafe_allow_html=True)
 
 ID_NAMES={"id","identifier","employee_id","student_id","customer_id","record_id","serial_no","serial_number","roll_no","roll_number","row_id","index"}
 MODEL_NAMES=["Linear Regression","Polynomial Regression","Ridge Regression","Lasso Regression","Elastic Net","Random Forest","Gradient Boosting","Linear + AI Residual Hybrid"]
@@ -246,15 +247,29 @@ def make_pipe(estimator,X):
     return Pipeline([("prep",prep),("model",estimator)])
 
 
-def model_specs(X,rf_trees,gb_trees,degree,seed):
+def make_tree_preprocessor(X):
+    """Tree models do not need numeric scaling; keep raw numeric scale and one-hot categoricals."""
+    num=[c for c in X.columns if pd.api.types.is_numeric_dtype(X[c])]
+    cat=[c for c in X.columns if c not in num]
+    transformers=[]
+    if num:
+        transformers.append(("num",SimpleImputer(strategy="median"),num))
+    if cat:
+        transformers.append(("cat",Pipeline([("imp",SimpleImputer(strategy="most_frequent")),("oh",OneHotEncoder(handle_unknown="ignore",sparse_output=False))]),cat))
+    return ColumnTransformer(transformers=transformers,remainder="drop")
+
+def make_tree_pipe(estimator,X):
+    return Pipeline([("prep",make_tree_preprocessor(X)),("model",estimator)])
+
+def model_specs(X,rf_trees,rf_leaf,gb_trees,gb_depth,degree,lasso_alpha,enet_alpha,enet_l1,seed):
     return {
         "Linear Regression":make_pipe(LinearRegression(),X),
         "Polynomial Regression":Pipeline([("prep",make_preprocessor(X)[0]),("poly",PolynomialFeatures(degree=degree,include_bias=False)),("scale",StandardScaler()),("model",LinearRegression())]),
         "Ridge Regression":make_pipe(Ridge(alpha=1.0),X),
-        "Lasso Regression":make_pipe(Lasso(alpha=.1,max_iter=30000),X),
-        "Elastic Net":make_pipe(ElasticNet(alpha=.1,l1_ratio=.5,max_iter=30000),X),
-        "Random Forest":make_pipe(RandomForestRegressor(n_estimators=rf_trees,random_state=seed,n_jobs=-1),X),
-        "Gradient Boosting":make_pipe(GradientBoostingRegressor(n_estimators=gb_trees,learning_rate=.05,max_depth=3,random_state=seed),X),
+        "Lasso Regression":make_pipe(Lasso(alpha=lasso_alpha,max_iter=30000),X),
+        "Elastic Net":make_pipe(ElasticNet(alpha=enet_alpha,l1_ratio=enet_l1,max_iter=30000),X),
+        "Random Forest":make_tree_pipe(RandomForestRegressor(n_estimators=rf_trees,min_samples_leaf=rf_leaf,random_state=seed,n_jobs=-1),X),
+        "Gradient Boosting":make_tree_pipe(GradientBoostingRegressor(n_estimators=gb_trees,learning_rate=.05,max_depth=gb_depth,random_state=seed),X),
     }
 
 
@@ -289,6 +304,95 @@ def hybrid_cv_scores(base,residual,X,y,outer_folds,inner_folds,seed):
     return results
 
 
+def robust_ols_results(osm):
+    """Return conventional and HC3-robust OLS inference in one table."""
+    rob=osm.get_robustcov_results(cov_type="HC3")
+    idx=list(osm.params.index)
+    rob_params=pd.Series(np.asarray(rob.params),index=idx)
+    rob_bse=pd.Series(np.asarray(rob.bse),index=idx)
+    rob_t=pd.Series(np.asarray(rob.tvalues),index=idx)
+    rob_p=pd.Series(np.asarray(rob.pvalues),index=idx)
+    rob_conf=np.asarray(rob.conf_int())
+    rob_ci_lo=pd.Series(rob_conf[:,0],index=idx)
+    rob_ci_hi=pd.Series(rob_conf[:,1],index=idx)
+    out=pd.DataFrame({
+        "Variable":idx,
+        "Coefficient":osm.params.values,
+        "Std. Error":osm.bse.values,
+        "HC3 Robust SE":rob_bse.values,
+        "t":osm.tvalues.values,
+        "Robust t":rob_t.values,
+        "p-value":osm.pvalues.values,
+        "HC3 Robust p-value":rob_p.values,
+        "95% CI Lower":osm.conf_int()[0].values,
+        "95% CI Upper":osm.conf_int()[1].values,
+        "HC3 95% CI Lower":rob_ci_lo.values,
+        "HC3 95% CI Upper":rob_ci_hi.values,
+    })
+    return out, rob
+
+def conformal_quantile(scores,alpha=0.10):
+    scores=np.asarray(scores,dtype=float)
+    scores=scores[np.isfinite(scores)]
+    if len(scores)==0:
+        return np.nan
+    scores=np.sort(scores)
+    rank=int(np.ceil((len(scores)+1)*(1-alpha)))
+    rank=max(1,min(rank,len(scores)))
+    return float(scores[rank-1])
+
+def fit_conformal_hybrid(base,residual,X_fit,y_fit,X_cal,y_cal,X_target,folds,seed,alpha=0.10):
+    """Fit hybrid on fit data, calibrate on held-out calibration data, return target intervals."""
+    bfit,rfit,cal_pred,_=hybrid_fit(base,residual,X_fit,y_fit,X_cal,folds,seed)
+    cal_scores=np.abs(y_cal.reset_index(drop=True).to_numpy(dtype=float)-np.asarray(cal_pred,dtype=float))
+    q=conformal_quantile(cal_scores,alpha=alpha)
+    target_pred=bfit.predict(X_target.reset_index(drop=True))+rfit.predict(X_target.reset_index(drop=True))
+    lower=target_pred-q
+    upper=target_pred+q
+    return target_pred,lower,upper,q,cal_scores,bfit,rfit
+
+def repeated_hybrid_stability(X,y,n_repeats,test_size,folds,rf_trees,rf_leaf,seed):
+    """Repeat the hybrid vs linear comparison and return held-out delta-risk values."""
+    X=X.reset_index(drop=True); y=y.reset_index(drop=True)
+    deltas=[]; wins=[]
+    for i in range(int(n_repeats)):
+        rs=int(seed)+i
+        Xtr_i,Xte_i,ytr_i,yte_i=train_test_split(X,y,test_size=test_size,random_state=rs)
+        base_i=make_pipe(LinearRegression(),X); residual_i=make_pipe(RandomForestRegressor(n_estimators=rf_trees,min_samples_leaf=rf_leaf,random_state=rs,n_jobs=-1),X)
+        try:
+            _,_,hyb_i,_=hybrid_fit(base_i,residual_i,Xtr_i,ytr_i,Xte_i,folds,rs)
+            lin_i=make_clone(base_i); lin_i.fit(Xtr_i,ytr_i); pred_lin=lin_i.predict(Xte_i)
+            mse_lin=float(mean_squared_error(yte_i,pred_lin)); mse_hyb=float(mean_squared_error(yte_i,hyb_i))
+            d=mse_lin-mse_hyb
+            deltas.append(d); wins.append(d>0)
+        except Exception:
+            continue
+    return np.asarray(deltas,dtype=float), np.asarray(wins,dtype=bool)
+
+def partial_dependence_simple(model,X,feature,points=40):
+    """Simple PDP for one feature using representative values of the other columns."""
+    X0=X.copy().reset_index(drop=True)
+    if pd.api.types.is_numeric_dtype(X0[feature]):
+        vals=X0[feature].dropna().to_numpy(dtype=float)
+        if len(vals)==0: return None
+        grid=np.linspace(float(np.quantile(vals,0.05)),float(np.quantile(vals,0.95)),points)
+    else:
+        cats=X0[feature].dropna().astype(str).unique().tolist()
+        if not cats: return None
+        grid=cats[:min(len(cats),points)]
+    row={}
+    for c in X0.columns:
+        if pd.api.types.is_numeric_dtype(X0[c]): row[c]=float(X0[c].median())
+        else:
+            mode=X0[c].mode(dropna=True)
+            row[c]=mode.iloc[0] if len(mode) else "Missing"
+    rows=[]
+    for val in grid:
+        rr=row.copy(); rr[feature]=val; rows.append(rr)
+    xx=pd.DataFrame(rows)
+    pred=np.asarray(model.predict(xx),dtype=float)
+    return xx[[feature]].assign(Residual_Correction=pred)
+
 def make_clone(obj):
     from sklearn.base import clone
     return clone(obj)
@@ -319,14 +423,21 @@ with st.sidebar:
     test_size=st.slider("Test-set proportion",0.15,0.40,0.20,0.05)
     seed=int(st.number_input("Random seed",1,9999,42,1))
     folds=st.slider("Cross-validation folds",3,10,5,1)
+    repeated_runs=st.slider("Hybrid stability repetitions",10,50,30,5)
     st.divider(); st.subheader("Model settings")
-    rf_trees=st.slider("Random Forest trees",50,500,200,50)
-    gb_trees=st.slider("Gradient Boosting trees",50,400,150,25)
+    rf_trees=st.slider("Random Forest trees",100,500,400,50)
+    rf_leaf=st.slider("Random Forest minimum leaf size",1,10,2,1)
+    gb_trees=st.slider("Gradient Boosting trees",100,400,200,25)
+    gb_depth=st.slider("Gradient Boosting depth",1,5,2,1)
     degree=st.selectbox("Polynomial degree",[2,3],index=0)
+    lasso_alpha=float(st.number_input("Lasso alpha",min_value=0.0001,max_value=1.0,value=0.01,step=0.005,format="%.4f"))
+    enet_alpha=float(st.number_input("Elastic Net alpha",min_value=0.0001,max_value=1.0,value=0.01,step=0.005,format="%.4f"))
+    enet_l1=float(st.slider("Elastic Net L1 ratio",0.0,1.0,0.5,0.05))
+    st.caption("📌 PhD pilot defaults: RF 400 trees, leaf 2; GB 200 trees, depth 2; Lasso/Elastic Net α = 0.01; Elastic Net mix = 0.50; degree = 2.")
     st.divider(); st.subheader("Model selection")
     criterion=st.selectbox("Selection criterion",["Cross-validation RMSE","Cross-validation MAE","Cross-validation R²","Test RMSE","Test MAE","Test R²"])
     selection_mode=st.radio("Final model display",["Automatically select","Choose manually"])
-    st.divider(); st.caption("Variable selection is available prominently in the main workspace. Full-data fit, statistical inference and out-of-sample prediction are reported separately.")
+    st.divider(); st.caption("Variable selection is beside the Run Analysis button. Full-data fit, statistical inference, out-of-sample prediction and explainable AI are reported separately.")
 
 upload=st.file_uploader("📥 Upload CSV or Excel dataset",type=["csv","xlsx","xls"])
 if upload is None:
@@ -346,7 +457,7 @@ if not numeric:
 
 st.success(f"Loaded **{len(df):,} rows × {len(df.columns):,} columns**")
 if {"Yield_t_ha","Year","Rainfall_mm","Mean_Temp_C","Fertilizer_kg_ha","Irrigation_Index"}.issubset(df.columns):
-    st.caption("📌 **PhD presentation dataset detected:** 300-row synthetic agriculture example. Presentation settings: Y = Yield_t_ha; X = Year, Rainfall_mm, Mean_Temp_C, Fertilizer_kg_ha, Irrigation_Index; test size = 20%; seed = 42; 5-fold CV; polynomial degree = 2.")
+    st.caption("📌 **PhD pilot dataset detected.** Default analysis matches the synopsis: Y = Yield_t_ha; X = Year, Rainfall_mm, Mean_Temp_C, Fertilizer_kg_ha, Irrigation_Index; 80/20 split; seed 42; 5-fold CV; degree 2; RF 400 trees/leaf 2; GB 200 trees/depth 2; Lasso/Elastic Net α 0.01; Elastic Net mix 0.50; hybrid = Linear + RF residual correction.")
 
 # Main variable-selection panel
 # Y must be selected before variables depending on y_col are calculated.
@@ -382,7 +493,7 @@ if not x_cols:
     st.warning("⚠️ Please select at least one independent variable (X) before running the analysis.")
     st.stop()
 
-current_signature=(upload.name,getattr(upload,"size",None),y_col,tuple(x_cols),float(test_size),int(seed),int(folds),int(rf_trees),int(gb_trees),int(degree),criterion,selection_mode)
+current_signature=(upload.name,getattr(upload,"size",None),y_col,tuple(x_cols),float(test_size),int(seed),int(folds),int(repeated_runs),int(rf_trees),int(rf_leaf),int(gb_trees),int(gb_depth),int(degree),float(lasso_alpha),float(enet_alpha),float(enet_l1),criterion,selection_mode)
 if st.session_state.get("analysis_signature") != current_signature:
     st.session_state["analysis_ready"]=False
 
@@ -391,7 +502,7 @@ if excluded_ids:
     st.info("ℹ️ Identifier columns excluded from the default predictors: " + ", ".join(excluded_ids))
 
 # Show tabs before analysis so the app never crashes just because a model fails.
-tabs=st.tabs(["🏠 Overview","📁 Data & EDA","🎨 Chart Studio","📊 Full Data Results","📚 Theory & How It Works","📈 Predictive Results","🩺 Diagnostics & Inference","💡 Results Interpretation & Limitations","📄 Report & Export"])
+tabs=st.tabs(["🏠 Overview","📁 Data & EDA","🎨 Chart Studio","📊 Full Data Results","📚 Theory & How It Works","📈 Predictive Results","🔍 Explainable AI","🩺 Diagnostics & Inference","💡 Results Interpretation & Limitations","📄 Report & Export"])
 
 with tabs[0]:
     st.markdown('<div class="card"><h2>Analysis overview</h2><p>Upload data, inspect quality, choose the outcome and predictors, run the models, compare full-data fit with out-of-sample prediction, examine the residual hybrid, check diagnostics, and interpret the evidence.</p></div>',unsafe_allow_html=True)
@@ -645,7 +756,7 @@ with tabs[4]:
         st.markdown("### Final test set")
         st.write("The untouched test set is reserved for the final out-of-sample evaluation after fitting and model-selection decisions. This is the main internal estimate of generalisation in this app.")
         st.markdown("### Inference versus prediction")
-        st.write("OLS coefficients, standard errors, confidence intervals and p-values address inferential questions under model assumptions. Test RMSE, MAE and R² address prediction. One model can be useful for inference while another gives lower prediction error.")
+        st.write("OLS coefficients, standard errors, confidence intervals and p-values address inferential questions under model assumptions. When heteroscedasticity is indicated, HC3 robust standard errors/p-values are reported. Test RMSE, MAE and R² address prediction. One model can be useful for inference while another gives lower prediction error.")
     elif theory_topic in model_details:
         info=model_details[theory_topic]
         theory_header(theory_topic,info["purpose"],info["model"])
@@ -674,14 +785,9 @@ if run_clicked:
     st.session_state["analysis_signature"]=current_signature
 
 if not st.session_state.get("analysis_ready",False):
-    with tabs[0]:
-        st.info("Choose Y and X, then click the **Run Analysis** button beside the selectors. Results tabs populate after the analysis is run.")
-    with tabs[3]: st.info("Select Y and X and click **Run Analysis** above.")
-    with tabs[4]: st.info("Select Y and X and click **Run Analysis** above.")
-    with tabs[5]: st.info("Select Y and X and click **Run Analysis** above.")
-    with tabs[6]: st.info("Select Y and X and click **Run Analysis** above.")
-    with tabs[7]: st.info("Select Y and X and click **Run Analysis** above.")
-    with tabs[8]: st.info("Select Y and X and click **Run Analysis** above.")
+    with tabs[0]: st.info("Choose Y and X, then click the **Run Analysis** button beside the selectors. Results tabs populate after the analysis is run.")
+    for _i in [3,4,5,6,7,8,9]:
+        with tabs[_i]: st.info("Select Y and X and click **Run Analysis** above.")
     st.stop()
 
 try:
@@ -703,7 +809,7 @@ try:
             "At least 2 usable observations are required. With one observation, an out-of-sample test cannot be calculated."
         )
     Xtr,Xte,ytr,yte=train_test_split(X,y,test_size=test_size,random_state=seed)
-    specs=model_specs(X,rf_trees,gb_trees,degree,seed)
+    specs=model_specs(X,rf_trees,rf_leaf,gb_trees,gb_depth,degree,lasso_alpha,enet_alpha,enet_l1,seed)
     preds={}; train_preds={}; rows=[]; cvrows=[]; failures=[]
     for name,est in specs.items():
         try:
@@ -723,7 +829,7 @@ try:
             failures.append(f"{name}: {e}")
     # Presentation-aligned hybrid: Linear statistical base + Random Forest residual learner.
     base=make_pipe(LinearRegression(),X)
-    residual=make_pipe(RandomForestRegressor(n_estimators=rf_trees,random_state=seed,n_jobs=-1),X)
+    residual=make_tree_pipe(RandomForestRegressor(n_estimators=rf_trees,min_samples_leaf=rf_leaf,random_state=seed,n_jobs=-1),X)
     try:
         base_fit,res_fit,hyb_pred,oof=hybrid_fit(base,residual,Xtr,ytr,Xte,folds,seed)
         hyb_train=base_fit.predict(Xtr)+res_fit.predict(Xtr); preds["Linear + AI Residual Hybrid"]=hyb_pred; train_preds["Linear + AI Residual Hybrid"]=hyb_train
@@ -783,10 +889,20 @@ try:
     Xdiag=build_ols_data(X)
     osm=sm.OLS(y,sm.add_constant(Xdiag.astype(float),has_constant="add")).fit() if not Xdiag.empty else None
     if osm is not None:
-        conf=osm.conf_int(); coef=pd.DataFrame({"Variable":osm.params.index,"Coefficient":osm.params.values,"Std. Error":osm.bse.values,"t":osm.tvalues.values,"p-value":osm.pvalues.values,"95% CI Lower":conf[0].values,"95% CI Upper":conf[1].values})
+        try:
+            coef,robust_osm=robust_ols_results(osm)
+        except Exception:
+            conf=osm.conf_int(); coef=pd.DataFrame({"Variable":osm.params.index,"Coefficient":osm.params.values,"Std. Error":osm.bse.values,"HC3 Robust SE":osm.bse.values,"t":osm.tvalues.values,"Robust t":osm.tvalues.values,"p-value":osm.pvalues.values,"HC3 Robust p-value":osm.pvalues.values,"95% CI Lower":conf[0].values,"95% CI Upper":conf[1].values,"HC3 95% CI Lower":conf[0].values,"HC3 95% CI Upper":conf[1].values}); robust_osm=None
         sst=float(np.sum((y-y.mean())**2)); ssr=float(np.sum(osm.resid**2)); anova=pd.DataFrame({"Source":["Regression","Residual","Total"],"Sum of Squares":[sst-ssr,ssr,sst],"df":[osm.df_model,osm.df_resid,osm.df_model+osm.df_resid]})
+        condition_number=float(osm.condition_number)
         try: bp_p=float(het_breuschpagan(osm.resid,osm.model.exog)[1])
         except Exception: bp_p=np.nan
+        if np.isfinite(bp_p) and bp_p < 0.05:
+            coef["Inference p-value"]=coef["HC3 Robust p-value"]
+            coef["Inference SE"]=coef["HC3 Robust SE"]
+        else:
+            coef["Inference p-value"]=coef["p-value"]
+            coef["Inference SE"]=coef["Std. Error"]
         vif_rows=[]
         if Xdiag.shape[1]>=2:
             for i,c in enumerate(Xdiag.columns):
@@ -795,11 +911,27 @@ try:
                 vif_rows.append({"Variable":c,"VIF":vv,"Interpretation":"Very high" if vv>=10 else ("High / potentially problematic" if vv>=5 else "No strong VIF indication")})
         vif=pd.DataFrame(vif_rows)
     else:
-        coef=anova=vif=pd.DataFrame(); bp_p=np.nan
+        coef=anova=vif=pd.DataFrame(); bp_p=np.nan; robust_osm=None; condition_number=np.nan
 except Exception as e:
     st.error(f"Analysis could not be completed: {e}")
     st.exception(e)
     st.stop()
+
+# Additional research layers are calculated only after the main model comparison succeeds.
+hybrid_exists=(hyb_pred is not None) and ("Linear Regression" in comparison.Model.values) and ("Linear + AI Residual Hybrid" in comparison.Model.values)
+conformal_info={"pred":None,"lower":None,"upper":None,"q":np.nan,"coverage":np.nan,"calibration_n":0,"alpha":0.10}
+stability_info={"ran":False,"deltas":np.array([]),"wins":np.array([])}
+if hybrid_exists and len(ytr) >= 10:
+    # Correct split-conformal demonstration: the primary pilot model remains unchanged;
+    # a separate fit/calibration split within training data is used for interval construction.
+    cal_n=max(5,int(round(0.25*len(ytr))))
+    Xfit_c,Xcal_c,yfit_c,ycal_c=train_test_split(Xtr,ytr,test_size=cal_n,random_state=seed)
+    try:
+        cp,cl,cu,q,cal_scores,_,_=fit_conformal_hybrid(base,residual,Xfit_c,yfit_c,Xcal_c,ycal_c,Xte,folds,seed,alpha=0.10)
+        coverage=float(np.mean((yte.reset_index(drop=True).to_numpy()>=cl)&(yte.reset_index(drop=True).to_numpy()<=cu)))
+        conformal_info={"pred":cp,"lower":cl,"upper":cu,"q":q,"coverage":coverage,"calibration_n":len(ycal_c),"alpha":0.10}
+    except Exception as e:
+        failures.append(f"Conformal interval: {e}")
 
 if failures:
     st.warning("Some model calculations were skipped. See details below.")
@@ -815,7 +947,9 @@ with tabs[3]:
     st.dataframe(full_comparison,use_container_width=True,hide_index=True)
     fig=px.bar(full_comparison,x="Model",y="R²",color="Type",title="Full-data R² comparison",text_auto=".3f"); fig.update_layout(template="plotly_white",height=500,xaxis_tickangle=-35); plot_with_guidance(fig)
     if not coef.empty:
-        with st.expander("Full-data OLS coefficients",expanded=True): st.dataframe(coef,use_container_width=True,hide_index=True)
+        with st.expander("Full-data OLS coefficients and robust inference",expanded=True):
+            st.dataframe(coef,use_container_width=True,hide_index=True)
+            if np.isfinite(bp_p) and bp_p < 0.05: st.warning("Breusch–Pagan indicates non-constant variance at the 5% level; the app therefore uses HC3 robust SE/p-values as the primary inferential quantities.")
 
 # Predictive results
 with tabs[5]:
@@ -826,6 +960,19 @@ with tabs[5]:
     fig=px.bar(comparison.sort_values("RMSE"),x="Model",y="RMSE",color="Type",title="Test RMSE by model",text_auto=".3f"); fig.update_layout(template="plotly_white",height=500,xaxis_tickangle=-35); plot_with_guidance(fig)
     pred_long=pd.DataFrame({"Actual":np.tile(yte.to_numpy(),len(preds)),"Predicted":np.concatenate(list(preds.values())),"Model":np.repeat(list(preds.keys()),len(yte))})
     fig=px.scatter(pred_long,x="Actual",y="Predicted",facet_col="Model",facet_col_wrap=2,title="Hold-out test predictions"); mn=min(pred_long.Actual.min(),pred_long.Predicted.min()); mx=max(pred_long.Actual.max(),pred_long.Predicted.max()); fig.add_shape(type="line",x0=mn,x1=mx,y0=mn,y1=mx,line_dash="dash",row="all",col="all"); fig.update_layout(template="plotly_white",height=850); plot_with_guidance(fig)
+
+    st.markdown("### Prediction uncertainty — 90% split-conformal interval")
+    if conformal_info["pred"] is not None:
+        c1,c2,c3,c4=st.columns(4)
+        c1.metric("Calibration observations",f"{conformal_info['calibration_n']:,}")
+        c2.metric("Interval half-width",f"± {conformal_info['q']:.4f}")
+        c3.metric("Target coverage","90%")
+        c4.metric("Observed test coverage",f"{100*conformal_info['coverage']:.1f}%")
+        st.write("The interval is calibrated on a held-out calibration subset of the training data and then evaluated on the untouched test observations. Under exchangeability, the split-conformal method targets the stated marginal coverage without assuming a parametric error distribution.")
+        cp=pd.DataFrame({"Actual":yte.reset_index(drop=True),"Hybrid prediction":conformal_info["pred"],"Lower 90%":conformal_info["lower"],"Upper 90%":conformal_info["upper"]})
+        st.dataframe(cp.head(20),use_container_width=True,hide_index=True)
+    else:
+        st.info("A conformal interval could not be calculated for this dataset/settings.")
 
     with st.expander("🔬 Hybrid analysis — statistical model + AI residual correction",expanded=False):
         if "Linear Regression" in comparison.Model.values and "Linear + AI Residual Hybrid" in comparison.Model.values:
@@ -842,6 +989,107 @@ with tabs[5]:
         st.warning("⚠️ The residual learner must use out-of-fold residuals and an untouched test set; otherwise the apparent improvement can be overly optimistic.")
 
 with tabs[6]:
+    st.subheader("🔍 Explainable AI — What the residual learner learned")
+    st.caption("This tab explains the AI correction, not causal effects. The key question is: what structure remains after the statistical base model, and does that structure generalise on held-out data?")
+
+    if not hybrid_exists:
+        st.info("Run the analysis with both Linear Regression and the residual hybrid available to use the explainable-AI layer.")
+    else:
+        hybrid_lin=comparison.loc[comparison.Model=="Linear Regression"].iloc[0]
+        hybrid_row=comparison.loc[comparison.Model=="Linear + AI Residual Hybrid"].iloc[0]
+        residual_test=yte.reset_index(drop=True).to_numpy(dtype=float)-base_fit.predict(Xte)
+
+        st.markdown("### 1. Residual learner target")
+        a,b,c=st.columns(3)
+        a.metric("Residual mean",f"{np.mean(residual_test):.4f}")
+        b.metric("Residual SD",f"{np.std(residual_test):.4f}")
+        b2=float(np.var(oof)) if len(oof) else np.nan
+        c.metric("OOF residual variance",f"{b2:.4f}" if np.isfinite(b2) else "N/A")
+        st.write("The AI model is trained to predict the systematic error left after the statistical base model. A strong explainable pattern is useful only if it also improves held-out prediction.")
+
+        st.markdown("### 2. Permutation importance of the AI residual learner")
+        try:
+            pi=permutation_importance(res_fit,Xte,residual_test,scoring="neg_root_mean_squared_error",n_repeats=20,random_state=seed,n_jobs=-1)
+            pi_df=pd.DataFrame({"Feature":Xte.columns,"Importance":pi.importances_mean,"SD":pi.importances_std}).sort_values("Importance",ascending=False).reset_index(drop=True)
+            st.dataframe(pi_df,use_container_width=True,hide_index=True)
+            top_feature=str(pi_df.iloc[0]["Feature"]) if len(pi_df) else None
+            if top_feature is not None:
+                top_imp=float(pi_df.iloc[0]["Importance"])
+                st.info(f"**What it indicates:** Shuffling **{top_feature}** changes the residual-learner error the most in this held-out calculation (importance ≈ {top_imp:.4f}). This indicates model reliance, not a causal effect.")
+                if len(pi_df)>1:
+                    ratio=float(top_imp/(abs(float(pi_df.iloc[1]["Importance"]))+1e-12))
+                    if ratio>=3:
+                        st.write(f"**Interpretation:** The top feature's residual-model importance is much larger than the second feature in this run. Investigate its shape before changing the statistical model.")
+                    else:
+                        st.write("**Interpretation:** Several predictors contribute to the residual learner, so the omitted structure may be distributed rather than attributable to one variable.")
+        except Exception as e:
+            top_feature=None
+            st.warning(f"Permutation importance could not be calculated: {e}")
+
+        st.markdown("### 3. Partial dependence of the residual correction")
+        numeric_remaining=[c for c in Xte.columns if pd.api.types.is_numeric_dtype(Xte[c])]
+        if top_feature is not None and numeric_remaining:
+            pd_feature=top_feature if top_feature in numeric_remaining else numeric_remaining[0]
+            pd_df=partial_dependence_simple(res_fit,Xtr,pd_feature,points=40)
+            if pd_df is not None:
+                fig_pd=px.line(pd_df,x=pd_feature,y="Residual_Correction",markers=True,title=f"Residual correction across {pd_feature}")
+                fig_pd.add_hline(y=0,line_dash="dash")
+                fig_pd.update_layout(template="plotly_white",height=500,yaxis_title="AI residual correction")
+                st.plotly_chart(fig_pd,use_container_width=True)
+                ypd=pd_df["Residual_Correction"].to_numpy(dtype=float)
+                if len(ypd)>=5:
+                    mid=float(np.max(ypd[2:-2]) if abs(np.max(ypd[2:-2]))>=abs(np.min(ypd[2:-2])) else np.min(ypd[2:-2]))
+                    endpoint=(float(ypd[0])+float(ypd[-1]))/2
+                    curve_strength=abs(mid-endpoint)
+                else: curve_strength=0.0
+                st.markdown(f"**What it indicates:** The curve shows how the AI correction changes as **{pd_feature}** varies while the other predictors are held near typical values.")
+                st.markdown(f"**Interpretation:** Positive values mean the AI adds to the statistical prediction; negative values mean the AI subtracts from it. A curved peak, trough or threshold is evidence to investigate possible nonlinear structure in the base model.")
+                if curve_strength>0.05:
+                    st.warning(f"⚠️ The displayed curve is not approximately flat. A candidate explanation is a missing nonlinear term or interaction; for this variable, a squared term is a natural hypothesis to test.")
+                st.caption("PDP is descriptive for the fitted residual learner and should be interpreted cautiously when predictors are correlated.")
+        else:
+            st.info("A numeric feature is needed for the simple partial-dependence display.")
+
+        st.markdown("### 4. Explain → improve → re-test")
+        st.write("The research workflow uses the AI explanation to generate a statistical hypothesis, not to claim causality. For example, if temperature shows a curved residual pattern, add a temperature-squared term to the statistical base using training data/cross-validation only, then re-measure the hybrid ΔR.")
+        st.markdown("**Success criterion:** after the missing structure is added to the base, the residual learner should have less predictable structure and the hybrid ΔR should shrink toward zero.")
+
+        st.markdown("### 5. Hybrid stability across repeated splits")
+        run_stability=st.checkbox(f"Run the PhD {repeated_runs}-split stability check",value=False,key="run_hybrid_stability")
+        if run_stability:
+            with st.spinner(f"Running {repeated_runs} repeated held-out comparisons. This can take some time on larger datasets..."):
+                dvals,wins=repeated_hybrid_stability(X,y,repeated_runs,test_size,folds,rf_trees,rf_leaf,seed)
+            stability_info={"ran":True,"deltas":dvals,"wins":wins}
+            if len(dvals):
+                s1,s2,s3,s4=st.columns(4)
+                s1.metric("Valid splits",f"{len(dvals):,}")
+                s2.metric("Hybrid improvements",f"{int(wins.sum()):,}/{len(wins):,}")
+                s3.metric("Mean ΔR",f"{np.mean(dvals):.4f}")
+                s4.metric("SD of ΔR",f"{np.std(dvals,ddof=1):.4f}" if len(dvals)>1 else "N/A")
+                st.write(f"Range of ΔR: **{np.min(dvals):.4f} to {np.max(dvals):.4f}**. Positive ΔR means the hybrid has lower held-out squared error than Linear Regression for that split.")
+                fig_st=px.histogram(x=dvals,nbins=12,title="Distribution of hybrid ΔR across repeated splits")
+                fig_st.add_vline(x=0,line_dash="dash")
+                fig_st.update_layout(template="plotly_white",height=450,xaxis_title="ΔR = Linear MSE − Hybrid MSE",yaxis_title="Number of splits")
+                st.plotly_chart(fig_st,use_container_width=True)
+                st.info("**What it indicates:** Repeated splits show whether the observed hybrid gain is stable rather than dependent on one lucky train/test partition. This is the stability evidence emphasized in the PhD synopsis.")
+            else:
+                st.warning("No repeated split completed successfully. Check sample size and model settings.")
+        else:
+            st.caption("The stability study is optional to keep the public app responsive. For the PhD pilot, use 30 repetitions to reproduce the synopsis protocol.")
+
+        st.markdown("### 6. Optional SHAP")
+        try:
+            import shap
+            st.success("SHAP is installed in this environment. A local SHAP view can be added for the residual learner when desired.")
+            st.caption("SHAP values are additive local explanations of model predictions. They explain model behaviour; they are not causal effects or p-values.")
+        except Exception:
+            st.info("SHAP is intentionally optional so the public app does not require the extra dependency. The app's core explainability layer uses held-out permutation importance and partial dependence.")
+
+        st.markdown("### 7. Plain-language interpretation")
+        st.info("Think of the statistical model as the main equation and the AI residual learner as a correction term. This tab answers: **which variables does the correction use, what shape does that correction take, and is the correction still useful on unseen data?**")
+
+
+with tabs[7]:
     st.subheader("🩺 Diagnostics & Statistical Inference")
     if osm is None:
         st.warning("OLS diagnostics could not be calculated for this specification.")
@@ -854,9 +1102,14 @@ with tabs[6]:
             else: st.info("VIF requires at least two usable predictor columns.")
         st.markdown("### Heteroscedasticity"); st.metric("Breusch–Pagan p-value",f"{bp_p:.4g}" if np.isfinite(bp_p) else "N/A")
         st.caption("The Breusch–Pagan test is a diagnostic for non-constant error variance; it is not a complete validity test.")
+        if np.isfinite(bp_p) and bp_p < 0.05:
+            st.warning("Non-constant variance is indicated at the 5% level. HC3 robust standard errors and p-values are therefore the primary inferential quantities in the OLS table.")
+        st.markdown("### Numerical conditioning")
+        st.metric("OLS condition number",f"{condition_number:.3g}" if np.isfinite(condition_number) else "N/A")
+        st.caption("A large condition number can reflect very different predictor scales as well as multicollinearity. Inspect VIF and consider scaling before treating it as evidence of collinearity.")
         st.markdown("### OLS vs predictive evaluation"); st.write(f"Full-data OLS uses {len(y):,} usable observations for inference. Predictive evaluation fits models on {len(ytr):,} training observations and evaluates them on {len(yte):,} untouched test observations. Different R² values are therefore expected.")
 
-with tabs[7]:
+with tabs[8]:
     st.subheader("💡 Results Interpretation & Model Limitations")
     st.caption("Everything is explained on one page so the user does not need to move between several interpretation tabs. Use the section headings and expanders to read only what you need.")
 
@@ -894,7 +1147,7 @@ with tabs[7]:
     st.markdown("### 4. OLS result interpretation")
     if not coef.empty:
         for _,r in coef.iterrows():
-            v=str(r['Variable']); b=float(r['Coefficient']); p=float(r['p-value']); lo=float(r['95% CI Lower']); hi=float(r['95% CI Upper'])
+            v=str(r['Variable']); b=float(r['Coefficient']); p=float(r.get('Inference p-value',r['p-value'])); lo=float(r['HC3 95% CI Lower'] if (np.isfinite(bp_p) and bp_p < 0.05) else r['95% CI Lower']); hi=float(r['HC3 95% CI Upper'] if (np.isfinite(bp_p) and bp_p < 0.05) else r['95% CI Upper'])
             if v.lower() in {'const','intercept'}:
                 continue
             direction="increase" if b>0 else "decrease" if b<0 else "change near zero"
@@ -980,7 +1233,7 @@ with tabs[2]:
             "Actual vs Predicted",
             "Residuals vs Predicted",
             "Residual distribution",
-            "Feature importance",
+            "Tree feature importance",
         ],
         key="simple_chart_type_v17"
     )
@@ -1081,7 +1334,7 @@ with tabs[2]:
         fig.update_layout(title=f"Residual distribution — {model_for_chart}",xaxis_title="Residual = Actual − Predicted",yaxis_title="Frequency")
         chart_note="The centre of the distribution indicates systematic over- or under-prediction on average; the spread shows how variable the errors are; the tails show unusually large errors. Normal-looking errors are not automatically required for good prediction, but are relevant to some inferential procedures."
 
-    else:  # Feature importance
+    else:  # Tree feature importance
         choices=[m for m in ["Random Forest","Gradient Boosting"] if m in specs]
         if not choices: st.info("Feature importance is available when a tree-based model has been run.")
         else:
@@ -1107,16 +1360,29 @@ with tabs[2]:
             st.markdown(f"**⚠️ Interpretation warning:** {warning}")
             st.markdown(f"**✅ What to do next:** {suggestion}")
 
-with tabs[8]:
+with tabs[9]:
     st.subheader("📄 Report & Export")
     pred_table=Xte.reset_index(drop=True).copy(); pred_table.insert(0,"Actual",yte.reset_index(drop=True))
     for m,p in preds.items(): pred_table[f"Predicted — {m}"]=p
-    report=f"""STATISTICAL–AI HYBRID MODELLING PLATFORM\n\nOutcome: {y_col}\nPredictors: {', '.join(x_cols)}\nObservations: {len(y)}\nTraining observations: {len(ytr)}\nTest observations: {len(yte)}\nTest proportion: {test_size}\nRandom seed: {seed}\nCV folds: {folds}\nSelection criterion: {criterion}\nSelected model: {selected_model}\n\nFULL-DATA RESULTS\n{full_comparison.to_string(index=False)}\n\nPREDICTIVE RESULTS\n{comparison.to_string(index=False)}\n\nOLS INFERENCE\n{coef.to_string(index=False) if not coef.empty else 'OLS unavailable'}\n\nINTERPRETATION\nFull-data fit, statistical inference and hold-out prediction are separate analyses. Hybrid incremental value should be assessed out-of-sample and should not be assumed a priori.\n"""
+    if conformal_info["pred"] is not None:
+        pred_table["Hybrid Lower 90%"]=conformal_info["lower"]
+        pred_table["Hybrid Upper 90%"]=conformal_info["upper"]
+    stability_text="Not run in this session."
+    if stability_info.get("ran") and len(stability_info.get("deltas",[])):
+        dv=stability_info["deltas"]; stability_text=f"Valid splits: {len(dv)}; Hybrid improvements: {int(stability_info['wins'].sum())}/{len(dv)}; Mean ΔR: {np.mean(dv):.6f}; SD: {np.std(dv,ddof=1):.6f} if len(dv)>1 else np.nan; Range: {np.min(dv):.6f} to {np.max(dv):.6f}"
+    conformal_text="Not available."
+    if conformal_info["pred"] is not None:
+        conformal_text=f"90% split-conformal interval half-width ±{conformal_info['q']:.6f}; calibration n={conformal_info['calibration_n']}; test coverage={100*conformal_info['coverage']:.1f}%"
+    report=f"""EXPLAINABLE STATISTICAL–AI HYBRID MODELLING\n\nOutcome: {y_col}\nPredictors: {', '.join(x_cols)}\nObservations: {len(y)}\nTraining observations: {len(ytr)}\nTest observations: {len(yte)}\nTest proportion: {test_size}\nRandom seed: {seed}\nCV folds: {folds}\nRF trees: {rf_trees}\nRF minimum leaf: {rf_leaf}\nGB trees: {gb_trees}\nGB depth: {gb_depth}\nPolynomial degree: {degree}\nLasso alpha: {lasso_alpha}\nElastic Net alpha: {enet_alpha}\nElastic Net L1 ratio: {enet_l1}\nSelection criterion: {criterion}\nSelected model: {selected_model}\n\nFULL-DATA RESULTS\n{full_comparison.to_string(index=False)}\n\nPREDICTIVE RESULTS\n{comparison.to_string(index=False)}\n\nOLS INFERENCE\n{coef.to_string(index=False) if not coef.empty else 'OLS unavailable'}\n\nCONFORMAL UNCERTAINTY\n{conformal_text}\n\nHYBRID STABILITY\n{stability_text}\n\nRESEARCH INTERPRETATION\nThe statistical base provides the primary coefficient inference. The AI residual learner is evaluated as a predictive correction and explained with held-out model-agnostic tools. Hybrid value is assessed with out-of-sample ΔR, not assumed in advance.\n"""
     st.text_area("Report preview",report,height=450)
     c1,c2,c3=st.columns(3); c1.download_button("⬇️ Comparison CSV",comparison.to_csv(index=False).encode(),"model_comparison.csv","text/csv"); c2.download_button("⬇️ Predictions CSV",pred_table.to_csv(index=False).encode(),"test_predictions.csv","text/csv"); c3.download_button("⬇️ Research TXT",report.encode(),"statistical_ai_report.txt","text/plain")
     excel=io.BytesIO()
     with pd.ExcelWriter(excel,engine="openpyxl") as w:
         df.to_excel(w,"Data",index=False); full_comparison.to_excel(w,"Full Data Results",index=False); comparison.to_excel(w,"Model Comparison",index=False); pred_table.to_excel(w,"Test Predictions",index=False); coef.to_excel(w,"OLS Coefficients",index=False); anova.to_excel(w,"ANOVA",index=False); vif.to_excel(w,"VIF",index=False)
+        if conformal_info["pred"] is not None:
+            pd.DataFrame({"Actual":yte.reset_index(drop=True),"Hybrid prediction":conformal_info["pred"],"Lower 90%":conformal_info["lower"],"Upper 90%":conformal_info["upper"]}).to_excel(w,"Conformal Interval",index=False)
+        if stability_info.get("ran"):
+            pd.DataFrame({"Delta_R":stability_info["deltas"],"Hybrid_Better":stability_info["wins"]}).to_excel(w,"Hybrid Stability",index=False)
     st.download_button("📘 Complete Excel report",excel.getvalue(),"statistical_ai_complete_report.xlsx","application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
-st.divider(); st.caption("StatAI v22 • Statistical–AI Hybrid Modelling Platform • Research and educational use")
+st.divider(); st.caption("StatAI v4 • Explainable Statistical–AI Hybrid Modelling • Research and educational use")
