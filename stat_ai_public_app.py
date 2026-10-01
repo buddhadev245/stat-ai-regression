@@ -20,7 +20,7 @@ from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
 from sklearn.inspection import permutation_importance
 
 warnings.filterwarnings("ignore")
-st.set_page_config(page_title="StatAI | Statistical–AI Hybrid Modelling", page_icon="📊", layout="wide")
+st.set_page_config(page_title="Explainable Statistical–AI Hybrid Modelling", page_icon="📊", layout="wide")
 
 st.markdown("""
 <style>
@@ -43,7 +43,7 @@ div[data-testid="stMetric"]{background:#f6fafb;border:1px solid #dcecef;padding:
 </style>
 """, unsafe_allow_html=True)
 
-st.markdown('<div class="hero"><div class="kicker">Research • prediction • inference • reproducibility</div><div class="title">🔎 Explainable Statistical–AI Hybrid Modelling</div><div class="subtitle">A research-oriented workspace for exploratory analysis, statistical regression, machine-learning comparison, residual hybrid modelling, explainable AI, uncertainty, diagnostics and reproducible reporting.</div></div>', unsafe_allow_html=True)
+st.markdown('<div class="hero"><div class="kicker">Prediction • uncertainty • statistical inference • reproducibility</div><div class="title">🔎 Explainable Statistical–AI Hybrid Modelling</div><div class="subtitle">A research-oriented workspace for exploratory analysis, statistical regression, machine-learning comparison, residual hybrid modelling, explainable AI, uncertainty, diagnostics and reproducible reporting.</div></div>', unsafe_allow_html=True)
 
 ID_NAMES={"id","identifier","employee_id","student_id","customer_id","record_id","serial_no","serial_number","roll_no","roll_number","row_id","index"}
 MODEL_NAMES=["Linear Regression","Polynomial Regression","Ridge Regression","Lasso Regression","Elastic Net","Random Forest","Gradient Boosting","Linear + AI Residual Hybrid"]
